@@ -1,11 +1,8 @@
 import { Module, Global } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
 import { RedisService } from './redis.service';
-import redisConfig from '../../config/redis.config';
 
 @Global()
 @Module({
-  imports: [ConfigModule.forFeature(redisConfig)],
   providers: [RedisService],
   exports: [RedisService],
 })

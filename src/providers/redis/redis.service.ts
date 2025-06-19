@@ -8,8 +8,6 @@ import Redis from 'ioredis';
 import { ConfigType } from '@nestjs/config';
 import redisConfig from '../../config/redis.config';
 
-export const REDIS_CLIENT = 'REDIS_CLIENT';
-
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private redisClient: Redis;
