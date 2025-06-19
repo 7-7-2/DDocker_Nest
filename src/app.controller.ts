@@ -10,7 +10,7 @@ import { AppService } from './app.service';
 //14. validation pipe checks annotated decorators within DTO(@UsePipes(validationPipe))
 //15. nest g guard 'auth' => sits in advance to whole controller or methods within it
 //17.
-@Controller()
+@Controller('/test')
 export class AppController {
   constructor(private readonly appService: AppService) {}
 

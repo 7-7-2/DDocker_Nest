@@ -1,24 +1,47 @@
+//Config Modules
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { MysqlModule } from './providers/mysql/mysql.module';
+import { RedisModule } from './providers/redis/redis.module';
+//Application Modules
 import { BrandModule } from './modules/brand/brand.module';
 import { UserModule } from './modules/user/user.module';
-import { UserController } from './modules/user/user.controller';
 import { SearchModule } from './modules/search/search.module';
 import { ReportModule } from './modules/report/report.module';
-import { NotificationModule } from './modules/notification/notification.module';
 import { SupportModule } from './modules/support/support.module';
 import { CoffeeModule } from './modules/coffee/coffee.module';
 import { LikeModule } from './modules/like/like.module';
 import { FollowModule } from './modules/follow/follow.module';
 import { PostModule } from './modules/post/post.module';
-//2. controllers invoke services
-//4. nest g module 'module_name' => modules comprise module dependency tree
-//5. nest g controller 'controller_name' => controller belongs to module
-//6. nest g service 'service_name' => add a service into providers
-//7. nest g resource 'crud_name' => spit out boilerplate codes
+import { NotificationModule } from './modules/notification/notification.module';
+//Configs
+import serverConfig from './config/server.config';
+import databaseConfig, { DatabaseConfigName } from './config/database.config';
+import redisConfig from './config/redis.config';
+import { DataSource, DataSourceOptions } from 'typeorm';
+
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [serverConfig, databaseConfig, redisConfig],
+      cache: true,
+      envFilePath: getEnvFilePath(),
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) =>
+        configService.getOrThrow(DatabaseConfigName),
+      inject: [ConfigService],
+      dataSourceFactory: async (options: DataSourceOptions) => {
+        const dataSource = await new DataSource(options).initialize();
+        return dataSource;
+      },
+    }),
+    MysqlModule,
+    RedisModule,
+    //App Modules
     BrandModule,
     UserModule,
     SearchModule,
@@ -30,7 +53,13 @@ import { PostModule } from './modules/post/post.module';
     NotificationModule,
     ReportModule,
   ],
-  controllers: [AppController, UserController],
-  providers: [AppService],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}
+
+function getEnvFilePath() {
+  return process.env.NODE_ENV === 'development'
+    ? '.env.development'
+    : '.env.production';
+}
