@@ -1,7 +1,8 @@
 //Config Modules
-import { Module } from '@nestjs/common';
+import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { APP_PIPE, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { MysqlModule } from './providers/mysql/mysql.module';
 import { RedisModule } from './providers/redis/redis.module';
 //Application Modules
@@ -20,6 +21,10 @@ import serverConfig from './config/server.config';
 import databaseConfig, { DatabaseConfigName } from './config/database.config';
 import redisConfig from './config/redis.config';
 import { DataSource, DataSourceOptions } from 'typeorm';
+import { AuthModule } from './auth/auth.module';
+//Common
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
   imports: [
@@ -52,9 +57,28 @@ import { DataSource, DataSourceOptions } from 'typeorm';
     SupportModule,
     NotificationModule,
     ReportModule,
+    AuthModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      provide: APP_PIPE,
+      useFactory: () =>
+        new ValidationPipe({
+          //Strips/blocks unknown fields
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          transform: true,
+        }),    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+  ],
 })
 export class AppModule {}
 
