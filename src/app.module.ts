@@ -3,6 +3,7 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_PIPE, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
 import { MysqlModule } from './providers/mysql/mysql.module';
 import { RedisModule } from './providers/redis/redis.module';
 //Application Modules
@@ -33,6 +34,22 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
       load: [serverConfig, databaseConfig, redisConfig],
       cache: true,
       envFilePath: getEnvFilePath(),
+    }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        customProps: () => ({
+          context: 'HTTP',
+        }),
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? {
+                target: 'pino-pretty',
+                options: {
+                  singleLine: true,
+                },
+              }
+            : undefined,
+      },
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -69,7 +86,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
           whitelist: true,
           forbidNonWhitelisted: true,
           transform: true,
-        }),    },
+        }),
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,

@@ -5,7 +5,6 @@ import { DataSource } from 'typeorm';
 export class MysqlService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly dataSource: DataSource) {}
 
-  // Lifecycle hooks
   async onModuleInit() {
     if (this.dataSource.isInitialized) {
       console.log('DatabaseService: DataSource is already initialized.');
