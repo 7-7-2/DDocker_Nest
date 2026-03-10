@@ -2,9 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { BaseRepository } from '../../common/database/base.repository';
 import { MysqlService } from '../../providers/mysql/mysql.service';
 import { UserRow } from './entities/user.entity';
-import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryRunner } from 'typeorm';
+
+export interface UserWithStatsRow extends UserRow {
+  sum: number;
+}
 
 @Injectable()
 export class UserRepository extends BaseRepository {
@@ -86,22 +89,22 @@ export class UserRepository extends BaseRepository {
     return results[0] || null;
   }
 
-  async getUserInfo(userId: string): Promise<UserResponseDto | null> {
+  async findUserWithStats(publicId: string): Promise<UserWithStatsRow | null> {
     const query = `
       SELECT 
-        u.public_id as userId, 
+        u.public_id, 
         u.nickname, 
-        u.profile_url as profileUrl, 
+        u.profile_url, 
         u.bio, 
-        u.fav_brand_id as favBrandId,
-        u.account_privacy as accountPrivacy,
+        u.fav_brand_id,
+        u.account_privacy,
         us.sum
       FROM user u
       LEFT JOIN user_stats us ON u.public_id = us.user_id
       WHERE u.public_id = ? AND u.deleted_at IS NULL
     `;
-    const results = await this.mysql.executeQuery<UserResponseDto>(query, [
-      userId,
+    const results = await this.mysql.executeQuery<UserWithStatsRow>(query, [
+      publicId,
     ]);
     return results[0] || null;
   }
