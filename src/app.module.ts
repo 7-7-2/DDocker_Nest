@@ -12,7 +12,7 @@ import { UserModule } from './modules/user/user.module';
 import { SearchModule } from './modules/search/search.module';
 import { ReportModule } from './modules/report/report.module';
 import { SupportModule } from './modules/support/support.module';
-import { CoffeeModule } from './modules/coffee/coffee.module';
+import { CaffeineModule } from './modules/caffeine/caffeine.module';
 import { LikeModule } from './modules/like/like.module';
 import { FollowModule } from './modules/follow/follow.module';
 import { PostModule } from './modules/post/post.module';
@@ -21,6 +21,10 @@ import { NotificationModule } from './modules/notification/notification.module';
 import serverConfig from './config/server.config';
 import databaseConfig, { DatabaseConfigName } from './config/database.config';
 import redisConfig from './config/redis.config';
+import googleConfig from './config/strategy/google.config';
+import kakaoConfig from './config/strategy/kakao.config';
+import jwtConfig from './config/strategy/jwt.config';
+
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { AuthModule } from './auth/auth.module';
 //Common
@@ -31,7 +35,14 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [serverConfig, databaseConfig, redisConfig],
+      load: [
+        serverConfig,
+        databaseConfig,
+        redisConfig,
+        googleConfig,
+        kakaoConfig,
+        jwtConfig,
+      ],
       cache: true,
       envFilePath: getEnvFilePath(),
     }),
@@ -70,7 +81,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     PostModule,
     FollowModule,
     LikeModule,
-    CoffeeModule,
+    CaffeineModule,
     SupportModule,
     NotificationModule,
     ReportModule,
