@@ -1,8 +1,7 @@
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-kakao';
-import { Inject, Injectable } from '@nestjs/common';
-import kakaoConfig from 'src/config/strategy/kakao.config';
-import { ConfigType } from '@nestjs/config';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OAuthUser } from '../interfaces/oauth-user.interface';
 
 interface KakaoProfile {
@@ -20,14 +19,11 @@ interface KakaoProfile {
 
 @Injectable()
 export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
-  constructor(
-    @Inject(kakaoConfig.KEY)
-    private readonly kakaoOAuthConfig: ConfigType<typeof kakaoConfig>,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     super({
-      clientID: kakaoOAuthConfig.clientID,
-      clientSecret: kakaoOAuthConfig.clientSecret,
-      callbackURL: kakaoOAuthConfig.callbackURL,
+      clientID: configService.getOrThrow<string>('KAKAO_CLIENT_ID'),
+      clientSecret: '', // Kakao often doesn't require this for certain flows, but passing empty string
+      callbackURL: configService.getOrThrow<string>('KAKAO_REDIRECT_URI'),
     });
   }
 
@@ -36,7 +32,7 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
     _refreshToken: string,
     profile: any,
     done: (err: any, user?: any, info?: any) => void,
-  ): any {
+  ): void {
     const kakaoProfile = profile as KakaoProfile;
     const user: OAuthUser = {
       provider: 'kakao',

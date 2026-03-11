@@ -21,7 +21,6 @@ import {
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
-import { UserRow } from './entities/user.entity';
 
 @ApiTags('users')
 @Controller('users')
@@ -50,8 +49,8 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current logged-in user profile info' })
   @ApiResponse({ status: 200, type: UserResponseDto })
-  async getMyInfo(@GetUser() user: UserRow) {
-    return await this.userService.getUserInfo(user.public_id);
+  async getMyInfo(@GetUser('public_id') userId: string) {
+    return await this.userService.getUserInfo(userId);
   }
 
   @Get(':userId/userInfo')
@@ -67,13 +66,10 @@ export class UserController {
   @ApiOperation({ summary: 'Update current user profile' })
   @ApiResponse({ status: 200, description: 'Profile updated' })
   async editProfile(
-    @GetUser() user: UserRow,
+    @GetUser('public_id') userId: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    return await this.userService.patchUserProfile(
-      user.public_id,
-      updateUserDto,
-    );
+    return await this.userService.patchUserProfile(userId, updateUserDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -81,7 +77,7 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete current user account (Soft Delete)' })
   @ApiResponse({ status: 200, description: 'Account soft-deleted' })
-  async deleteAccount(@GetUser() user: UserRow) {
-    return await this.userService.deleteAccount(user.public_id);
+  async deleteAccount(@GetUser('public_id') userId: string) {
+    return await this.userService.deleteAccount(userId);
   }
 }

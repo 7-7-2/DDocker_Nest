@@ -9,7 +9,6 @@ async function bootstrap() {
     cors: true,
     bufferLogs: true,
   });
-
   app.useLogger(app.get(Logger));
 
   const config = new DocumentBuilder()

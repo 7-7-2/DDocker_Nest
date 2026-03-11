@@ -1,11 +1,15 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-//WIP
+import { UserRow } from '../../modules/user/entities/user.entity';
+
 export const GetUser = createParamDecorator(
-  (data: string | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
-    if (data) {
-      return request.user[data];
+  (data: keyof UserRow | undefined, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest<{ user: UserRow }>();
+    const user = request.user;
+
+    if (!user) {
+      return null;
     }
-    return request.user;
+
+    return data ? user[data] : user;
   },
 );

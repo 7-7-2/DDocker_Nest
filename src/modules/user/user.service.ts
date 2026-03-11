@@ -1,11 +1,74 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { UserRepository, UserWithStatsRow } from './user.repository';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserRow } from './entities/user.entity';
 import { UserResponseDto } from './dto/user-response.dto';
+import { RedisService } from '../../providers/redis/redis.service';
+import { OAuthUser } from '../../auth/interfaces/oauth-user.interface';
+import { UserRepository, UserWithStatsRow } from './user.repository';
+
+class MysqlError extends Error {
+  errno: number;
+}
 
 @Injectable()
 export class UserService {
-  constructor(private readonly userRepository: UserRepository) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly redisService: RedisService,
+  ) {}
+
+  async setUserInit(dto: CreateUserDto): Promise<void> {
+    const oauthUser = await this.redisService.get<OAuthUser>(
+      `auth_handover:${dto.socialToken}`,
+    );
+
+    if (!oauthUser) {
+      throw new UnauthorizedException('Invalid or expired social token');
+    }
+
+    const queryRunner = await this.userRepository.getQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.userRepository.insertUser(
+        {
+          public_id: dto.userId,
+          useremail: oauthUser.email,
+          nickname: dto.nickname,
+          fav_brand_id: dto.favBrandId,
+          profile_url: dto.profileUrl,
+          bio: dto.aboutMe,
+          social: oauthUser.provider,
+        },
+        queryRunner,
+      );
+
+      await this.userRepository.insertInitStats(dto.userId, queryRunner);
+
+      await queryRunner.commitTransaction();
+      await this.redisService.del(`auth_handover:${dto.socialToken}`);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      if (error instanceof MysqlError && error.errno === 1062) {
+        throw new ConflictException('Nickname or User already exists');
+      }
+
+      throw new InternalServerErrorException(
+        'Failed to initialize user profile',
+      );
+    } finally {
+      await queryRunner.release();
+    }
+  }
 
   async getUserInfo(userId: string): Promise<UserResponseDto> {
     const userWithStats = await this.userRepository.findUserWithStats(userId);
@@ -14,22 +77,33 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    return this.mapUserToResDto(userWithStats);
+    return this.mapToResponseDto(userWithStats);
   }
 
-  async updateProfile(userId: string, updateUserDto: UpdateUserDto) {
-    return await this.userRepository.patchUserProfile(userId, updateUserDto);
+  async patchUserProfile(userId: string, dto: UpdateUserDto): Promise<void> {
+    await this.userRepository.patchUserProfile(userId, dto);
   }
 
-  async checkNickname(nickname: string): Promise<boolean> {
+  async deleteAccount(userId: string): Promise<void> {
+    await this.userRepository.deleteAccount(userId);
+  }
+
+  async checkUserNickname(nickname: string): Promise<boolean> {
     return await this.userRepository.checkNickname(nickname);
   }
 
-  async remove(userId: string) {
-    return await this.userRepository.deleteAccount(userId);
+  async findByPublicId(publicId: string): Promise<UserRow | null> {
+    return await this.userRepository.findByPublicId(publicId);
   }
 
-  private mapUserToResDto(row: UserWithStatsRow): UserResponseDto {
+  async findByEmailAndProvider(
+    email: string,
+    social: string,
+  ): Promise<UserRow | null> {
+    return await this.userRepository.findByEmailAndProvider(email, social);
+  }
+
+  private mapToResponseDto(row: UserWithStatsRow): UserResponseDto {
     return {
       userId: row.public_id,
       nickname: row.nickname || '',

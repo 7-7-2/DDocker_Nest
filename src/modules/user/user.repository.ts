@@ -52,7 +52,7 @@ export class UserRepository extends BaseRepository {
     if (queryRunner) {
       await queryRunner.query(query, params);
     } else {
-      await this.mysql.executeQuery(query, params);
+      await this.mysql.execute(query, params);
     }
   }
 
@@ -64,13 +64,13 @@ export class UserRepository extends BaseRepository {
     if (queryRunner) {
       await queryRunner.query(query, [userId]);
     } else {
-      await this.mysql.executeQuery(query, [userId]);
+      await this.mysql.execute(query, [userId]);
     }
   }
 
   async findByPublicId(publicId: string): Promise<UserRow | null> {
     const query = `SELECT * FROM user WHERE public_id = ? AND deleted_at IS NULL`;
-    const results = await this.mysql.executeQuery<UserRow>(query, [publicId]);
+    const results = await this.mysql.query<UserRow>(query, [publicId]);
     return results[0] || null;
   }
 
@@ -82,10 +82,7 @@ export class UserRepository extends BaseRepository {
       SELECT * FROM user 
       WHERE useremail = ? AND social = ? AND deleted_at IS NULL
     `;
-    const results = await this.mysql.executeQuery<UserRow>(query, [
-      email,
-      social,
-    ]);
+    const results = await this.mysql.query<UserRow>(query, [email, social]);
     return results[0] || null;
   }
 
@@ -103,9 +100,7 @@ export class UserRepository extends BaseRepository {
       LEFT JOIN user_stats us ON u.public_id = us.user_id
       WHERE u.public_id = ? AND u.deleted_at IS NULL
     `;
-    const results = await this.mysql.executeQuery<UserWithStatsRow>(query, [
-      publicId,
-    ]);
+    const results = await this.mysql.query<UserWithStatsRow>(query, [publicId]);
     return results[0] || null;
   }
 
@@ -113,7 +108,7 @@ export class UserRepository extends BaseRepository {
     const buildResult = this.buildUpdateQuery('user', dto, 'public_id', userId);
     if (!buildResult) return;
 
-    await this.mysql.executeQuery(buildResult.query, buildResult.params);
+    await this.mysql.execute(buildResult.query, buildResult.params);
   }
 
   async deleteAccount(userId: string): Promise<void> {
@@ -122,7 +117,7 @@ export class UserRepository extends BaseRepository {
       SET deleted_at = CURRENT_TIMESTAMP 
       WHERE public_id = ? AND deleted_at IS NULL
     `;
-    await this.mysql.executeQuery(query, [userId]);
+    await this.mysql.execute(query, [userId]);
   }
 
   async checkNickname(nickname: string): Promise<boolean> {
@@ -131,10 +126,14 @@ export class UserRepository extends BaseRepository {
       FROM user 
       WHERE nickname = ? AND deleted_at IS NULL
     `;
-    const results = await this.mysql.executeQuery<{ count: string }>(query, [
+    const results = await this.mysql.query<{ count: string }>(query, [
       nickname,
     ]);
-    return parseInt(results[0].count, 10) > 0;
+    const row = results[0];
+    if (row) {
+      return parseInt(row.count, 10) > 0;
+    }
+    return false;
   }
 
   async getQueryRunner() {

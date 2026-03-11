@@ -30,7 +30,7 @@ export class BrandRepository {
       ) AS temp
     `;
 
-    const results = await this.mysqlService.executeQuery<BrandQueryRow>(query);
+    const results = await this.mysqlService.query<BrandQueryRow>(query);
 
     return results[0]?.coffee_menus;
   }
