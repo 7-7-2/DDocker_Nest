@@ -25,10 +25,6 @@ export class AuthService {
     });
   }
 
-  async validateUserById(userId: string): Promise<UserRow | null> {
-    return await this.userService.findByPublicId(userId);
-  }
-
   async login(user: UserRow) {
     const payload: JwtPayload = { sub: user.public_id };
     return {
