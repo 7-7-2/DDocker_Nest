@@ -10,6 +10,12 @@ import {
   CaffeineDetailItemDto,
   CaffeineSummaryItemDto,
 } from './dto/caffeine-calendar.dto';
+import {
+  TodayCaffeineItemDto,
+  TodayCaffeineResponseDto,
+  WeeklyStatsResponseDto,
+  WeeklyTrendDto,
+} from './dto/caffeine-stats.dto';
 
 @Injectable()
 export class CaffeineService {
@@ -56,13 +62,98 @@ export class CaffeineService {
     }
   }
 
+  async getTodayConsumption(userId: string): Promise<TodayCaffeineResponseDto> {
+    const now = new Date();
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      0,
+      0,
+      0,
+    );
+    const end = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      23,
+      59,
+      59,
+    );
+
+    const row = await this.caffeineRepository.findTodayConsumption(
+      userId,
+      this.formatDateForDb(start),
+      this.formatDateForDb(end),
+    );
+
+    if (!row) {
+      return { todayCaffeine: 0, todayCups: 0, items: [] };
+    }
+
+    return {
+      todayCaffeine: row.caffeine_sum ? Number(row.caffeine_sum) : 0,
+      todayCups: row.cup_count,
+      items: this.parseItems(row.items),
+    };
+  }
+
+  private parseItems(items: unknown): TodayCaffeineItemDto[] {
+    if (!items) return [];
+
+    try {
+      if (Array.isArray(items)) {
+        return items as TodayCaffeineItemDto[];
+      }
+
+      if (typeof items === 'string') {
+        const parsed: unknown = JSON.parse(items);
+        return Array.isArray(parsed) ? (parsed as TodayCaffeineItemDto[]) : [];
+      }
+    } catch (error) {
+      this.logger.error('Failed to parse today consumption items', error);
+    }
+
+    return [];
+  }
+
+  async getWeeklyTrend(userId: string): Promise<WeeklyStatsResponseDto> {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? 6 : day - 1;
+
+    const currentMonday = new Date(now);
+    currentMonday.setDate(now.getDate() - diffToMonday);
+    currentMonday.setHours(0, 0, 0, 0);
+
+    const sixWeeksAgoMonday = new Date(currentMonday);
+    sixWeeksAgoMonday.setDate(currentMonday.getDate() - 35);
+
+    const rows = await this.caffeineRepository.findWeeklyCupStats(
+      userId,
+      this.formatDateForDb(sixWeeksAgoMonday),
+    );
+
+    const trend: WeeklyTrendDto[] = rows.map((row) => {
+      const start = new Date(row.week_start);
+      const end = new Date(row.week_end);
+      const label = `${this.formatDateShort(start)}~${this.formatDateShort(end)}`;
+
+      return {
+        range: label,
+        cups: row.cups,
+      };
+    });
+
+    return { trend };
+  }
+
   async getMonthlyView(
     userId: string,
     dateStr: string,
   ): Promise<CaffeineMonthlyViewDto> {
     const { start, end } = this.getMonthRange(dateStr);
-
-    const dailyLogs = await this.caffeineRepository.findMonthlyDetails(
+    const rows = await this.caffeineRepository.findMonthlyDetails(
       userId,
       start,
       end,
@@ -71,21 +162,21 @@ export class CaffeineService {
     const details: Record<string, CaffeineDetailItemDto[]> = {};
     const sumsMap: Record<number, number> = {};
 
-    dailyLogs.forEach((dailyLog) => {
-      const day = dailyLog.day;
+    rows.forEach((row) => {
+      const day = row.day;
       const dayKey = day.toString();
 
       if (!details[dayKey]) details[dayKey] = [];
       details[dayKey].push({
-        brandName: dailyLog.brand_name,
-        caffeine: dailyLog.caffeine,
-        productName: dailyLog.product_name,
-        intensity: dailyLog.intensity,
-        shot: dailyLog.shot,
-        size: dailyLog.size,
+        brandName: row.brand_name,
+        caffeine: row.caffeine,
+        productName: row.product_name,
+        intensity: row.intensity,
+        shot: row.shot,
+        size: row.size,
       });
 
-      sumsMap[day] = (sumsMap[day] || 0) + dailyLog.caffeine;
+      sumsMap[day] = (sumsMap[day] || 0) + row.caffeine;
     });
 
     const summary: CaffeineSummaryItemDto[] = Object.keys(sumsMap).map(
@@ -95,27 +186,35 @@ export class CaffeineService {
       }),
     );
 
-    return {
-      summary,
-      details,
-    };
+    return { summary, details };
   }
 
   private getMonthRange(dateStr: string): { start: string; end: string } {
     const date = new Date(dateStr);
-    if (isNaN(date.getTime())) {
-      throw new InternalServerErrorException('Invalid date format');
-    }
-
-    const year = date.getFullYear();
-    const month = date.getMonth();
-
-    const firstDay = new Date(year, month, 1, 0, 0, 0);
-    const lastDay = new Date(year, month + 1, 0, 23, 59, 59);
-
+    if (isNaN(date.getTime()))
+      throw new InternalServerErrorException('Invalid date');
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0);
+    const lastDay = new Date(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    );
     return {
-      start: firstDay.toISOString().slice(0, 19).replace('T', ' '),
-      end: lastDay.toISOString().slice(0, 19).replace('T', ' '),
+      start: this.formatDateForDb(firstDay),
+      end: this.formatDateForDb(lastDay),
     };
+  }
+
+  private formatDateForDb(date: Date): string {
+    return date.toISOString().slice(0, 19).replace('T', ' ');
+  }
+
+  private formatDateShort(date: Date): string {
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const d = date.getDate().toString().padStart(2, '0');
+    return `${m}.${d}`;
   }
 }
