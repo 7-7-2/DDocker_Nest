@@ -18,7 +18,4 @@ export class UserResponseDto {
 
   @ApiProperty({ description: 'Total caffeine from user_stats table' })
   sum: number;
-
-  @ApiProperty({ description: '0: Public, 1: Private' })
-  accountPrivacy: number;
 }

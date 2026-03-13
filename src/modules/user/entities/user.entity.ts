@@ -10,5 +10,4 @@ export interface UserRow {
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
-  account_privacy: number; // 0: Public, 1: Private
 }
