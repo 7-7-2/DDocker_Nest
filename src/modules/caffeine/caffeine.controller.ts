@@ -5,6 +5,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Get,
+  Query,
 } from '@nestjs/common';
 import { CaffeineService } from './caffeine.service';
 import { CreateCaffeineDto } from './dto/create-caffeine.dto';
@@ -16,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
+import { CaffeineMonthlyViewDto } from './dto/caffeine-calendar.dto';
 
 @ApiTags('caffeine')
 @Controller('caffeine')
@@ -43,5 +46,19 @@ export class CaffeineController {
       success: true,
       intakeId,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('calendar')
+  @ApiOperation({
+    summary: 'Get consolidated monthly view (Summary + Details)',
+  })
+  @ApiResponse({ status: 200, type: CaffeineMonthlyViewDto })
+  async getMonthlyView(
+    @GetUser('public_id') userId: string,
+    @Query('date') date: string, // Expecting YYYY-MM-DD
+  ): Promise<CaffeineMonthlyViewDto> {
+    return await this.caffeineService.getMonthlyView(userId, date);
   }
 }
