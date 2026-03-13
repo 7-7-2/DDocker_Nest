@@ -5,6 +5,9 @@ import { UserRow } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryRunner } from 'typeorm';
 
+/**
+ * Raw database result combining user and their stats.
+ */
 export interface UserWithStatsRow extends UserRow {
   sum: number;
 }
@@ -67,25 +70,40 @@ export class UserRepository extends BaseRepository {
       await this.mysql.execute(query, [userId]);
     }
   }
-
+  //which is necessary, publid id?, JWT wraps it up.
   async findByPublicId(publicId: string): Promise<UserRow | null> {
-    const query = `SELECT * FROM user WHERE public_id = ? AND deleted_at IS NULL`;
+    const query = `
+      SELECT 
+        id, public_id, useremail, nickname, profile_url, 
+        fav_brand_id, social, bio, created_at, updated_at, 
+        deleted_at, account_privacy
+      FROM user 
+      WHERE public_id = ? AND deleted_at IS NULL
+    `;
     const results = await this.mysql.query<UserRow>(query, [publicId]);
     return results[0] || null;
   }
 
+  //which are necessary, it just checks if user is registered in DB
   async findByEmailAndProvider(
     email: string,
     social: string,
   ): Promise<UserRow | null> {
     const query = `
-      SELECT * FROM user 
+      SELECT 
+        id, public_id, useremail, nickname, profile_url, 
+        fav_brand_id, social, bio, created_at, updated_at, 
+        deleted_at, account_privacy
+      FROM user 
       WHERE useremail = ? AND social = ? AND deleted_at IS NULL
     `;
     const results = await this.mysql.query<UserRow>(query, [email, social]);
     return results[0] || null;
   }
 
+  /**
+   * findUserWithStats using explicit projection.
+   */
   async findUserWithStats(publicId: string): Promise<UserWithStatsRow | null> {
     const query = `
       SELECT 
@@ -122,18 +140,15 @@ export class UserRepository extends BaseRepository {
 
   async checkNickname(nickname: string): Promise<boolean> {
     const query = `
-      SELECT COUNT(*) as count 
+      SELECT id 
       FROM user 
       WHERE nickname = ? AND deleted_at IS NULL
+      LIMIT 1
     `;
-    const results = await this.mysql.query<{ count: string }>(query, [
+    const results = await this.mysql.query<Pick<UserRow, 'id'>>(query, [
       nickname,
     ]);
-    const row = results[0];
-    if (row) {
-      return parseInt(row.count, 10) > 0;
-    }
-    return false;
+    return results.length > 0;
   }
 
   async getQueryRunner() {
