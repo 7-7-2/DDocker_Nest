@@ -19,6 +19,10 @@ import {
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { CaffeineMonthlyViewDto } from './dto/caffeine-calendar.dto';
+import {
+  TodayCaffeineResponseDto,
+  WeeklyStatsResponseDto,
+} from './dto/caffeine-stats.dto';
 
 @ApiTags('caffeine')
 @Controller('caffeine')
@@ -46,6 +50,28 @@ export class CaffeineController {
       success: true,
       intakeId,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('today')
+  @ApiOperation({ summary: "Get today's consumption summary for main page" })
+  @ApiResponse({ status: 200, type: TodayCaffeineResponseDto })
+  async getTodayConsumption(
+    @GetUser('public_id') userId: string,
+  ): Promise<TodayCaffeineResponseDto> {
+    return await this.caffeineService.getTodayConsumption(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('stats/weekly')
+  @ApiOperation({ summary: 'Get 6-week trend data (cups per week)' })
+  @ApiResponse({ status: 200, type: WeeklyStatsResponseDto })
+  async getWeeklyTrend(
+    @GetUser('public_id') userId: string,
+  ): Promise<WeeklyStatsResponseDto> {
+    return await this.caffeineService.getWeeklyTrend(userId);
   }
 
   @UseGuards(JwtAuthGuard)
