@@ -1,8 +1,8 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { BaseRepository } from '../../common/database/base.repository';
 import { MysqlService } from '../../providers/mysql/mysql.service';
-import { CaffeineIntakeRow } from './entities/caffeine-intake.entity';
 import { QueryRunner } from 'typeorm';
+import { CaffeineMonthlyDetailRow } from './dto/caffeine-calendar.dto';
 
 export interface CaffeineInsertData {
   user_id: string;
@@ -59,7 +59,6 @@ export class CaffeineRepository extends BaseRepository {
     return header.insertId;
   }
 
-  //TODO : MUST-Cache
   async updateUserStatsSum(
     userId: string,
     addedCaffeine: number,
@@ -79,13 +78,33 @@ export class CaffeineRepository extends BaseRepository {
     }
   }
 
-  async findHistoryByUserId(userId: string): Promise<CaffeineIntakeRow[]> {
+  async findMonthlyDetails(
+    userId: string,
+    start: string,
+    end: string,
+  ): Promise<CaffeineMonthlyDetailRow[]> {
     const query = `
-      SELECT * FROM caffeine_intake 
-      WHERE user_id = ? AND deleted_at IS NULL
-      ORDER BY created_at DESC
+      SELECT 
+        DAY(i.created_at) as day,
+        b.brand_name,
+        i.caffeine,
+        i.product_name,
+        i.intensity,
+        i.shot,
+        i.size
+      FROM caffeine_intake i
+      JOIN brand b ON i.brand_id = b.id
+      WHERE i.user_id = ? 
+        AND i.created_at >= ? 
+        AND i.created_at <= ?
+        AND i.deleted_at IS NULL
+      ORDER BY i.created_at ASC
     `;
-    return await this.mysql.query<CaffeineIntakeRow>(query, [userId]);
+    return await this.mysql.query<CaffeineMonthlyDetailRow>(query, [
+      userId,
+      start,
+      end,
+    ]);
   }
 
   async getQueryRunner() {
