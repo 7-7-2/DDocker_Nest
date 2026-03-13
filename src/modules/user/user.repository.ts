@@ -38,9 +38,8 @@ export class UserRepository extends BaseRepository {
         fav_brand_id, 
         profile_url, 
         bio, 
-        social, 
-        account_privacy
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+        social
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
     const params = [
       data.public_id,
@@ -70,13 +69,16 @@ export class UserRepository extends BaseRepository {
       await this.mysql.execute(query, [userId]);
     }
   }
-  //which is necessary, publid id?, JWT wraps it up.
+
+  /**
+   * findByPublicId using explicit projection to avoid SELECT *.
+   */
   async findByPublicId(publicId: string): Promise<UserRow | null> {
     const query = `
       SELECT 
         id, public_id, useremail, nickname, profile_url, 
         fav_brand_id, social, bio, created_at, updated_at, 
-        deleted_at, account_privacy
+        deleted_at
       FROM user 
       WHERE public_id = ? AND deleted_at IS NULL
     `;
@@ -84,7 +86,9 @@ export class UserRepository extends BaseRepository {
     return results[0] || null;
   }
 
-  //which are necessary, it just checks if user is registered in DB
+  /**
+   * findByEmailAndProvider using explicit projection and index-friendly WHERE.
+   */
   async findByEmailAndProvider(
     email: string,
     social: string,
@@ -93,7 +97,7 @@ export class UserRepository extends BaseRepository {
       SELECT 
         id, public_id, useremail, nickname, profile_url, 
         fav_brand_id, social, bio, created_at, updated_at, 
-        deleted_at, account_privacy
+        deleted_at
       FROM user 
       WHERE useremail = ? AND social = ? AND deleted_at IS NULL
     `;
@@ -112,7 +116,6 @@ export class UserRepository extends BaseRepository {
         u.profile_url, 
         u.bio, 
         u.fav_brand_id,
-        u.account_privacy,
         us.sum
       FROM user u
       LEFT JOIN user_stats us ON u.public_id = us.user_id

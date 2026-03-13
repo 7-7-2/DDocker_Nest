@@ -13,10 +13,6 @@ import { RedisService } from '../../providers/redis/redis.service';
 import { OAuthUser } from '../../auth/interfaces/oauth-user.interface';
 import { UserRepository, UserWithStatsRow } from './user.repository';
 
-class MysqlError extends Error {
-  errno: number;
-}
-
 @Injectable()
 export class UserService {
   constructor(
@@ -24,6 +20,9 @@ export class UserService {
     private readonly redisService: RedisService,
   ) {}
 
+  /**
+   * Initializes a user profile and stats within a transaction.
+   */
   async setUserInit(dto: CreateUserDto): Promise<void> {
     const oauthUser = await this.redisService.get<OAuthUser>(
       `auth_handover:${dto.socialToken}`,
@@ -58,7 +57,8 @@ export class UserService {
     } catch (error) {
       await queryRunner.rollbackTransaction();
 
-      if (error instanceof MysqlError && error.errno === 1062) {
+      // Check for ER_DUP_ENTRY (errno 1062)
+      if (error instanceof Error && (error as any).errno === 1062) {
         throw new ConflictException('Nickname or User already exists');
       }
 
@@ -70,6 +70,9 @@ export class UserService {
     }
   }
 
+  /**
+   * get... orchestrates data fetching and mapping to return a DTO.
+   */
   async getUserInfo(userId: string): Promise<UserResponseDto> {
     const userWithStats = await this.userRepository.findUserWithStats(userId);
 
@@ -92,6 +95,9 @@ export class UserService {
     return await this.userRepository.checkNickname(nickname);
   }
 
+  /**
+   * Methods used for Auth Guard / Internal lookup (Returns raw Rows)
+   */
   async findByPublicId(publicId: string): Promise<UserRow | null> {
     return await this.userRepository.findByPublicId(publicId);
   }
@@ -103,6 +109,9 @@ export class UserService {
     return await this.userRepository.findByEmailAndProvider(email, social);
   }
 
+  /**
+   * Maps raw Database Row (snake_case) to API Response DTO (camelCase).
+   */
   private mapToResponseDto(row: UserWithStatsRow): UserResponseDto {
     return {
       userId: row.public_id,
@@ -110,7 +119,6 @@ export class UserService {
       profileUrl: row.profile_url || '',
       bio: row.bio || '',
       favBrandId: row.fav_brand_id || 0,
-      accountPrivacy: row.account_privacy,
       sum: row.sum || 0,
     };
   }
