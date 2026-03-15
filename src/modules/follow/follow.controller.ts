@@ -1,34 +1,77 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Delete,
+  Param,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Get,
+  Query,
+} from '@nestjs/common';
 import { FollowService } from './follow.service';
-import { CreateFollowDto } from './dto/create-follow.dto';
-import { UpdateFollowDto } from './dto/update-follow.dto';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
+import { GetUser } from '../../auth/decorators/get-user.decorator';
+import { PaginatedFollowResponseDto } from './dto/follow-list.dto';
 
+@ApiTags('follow')
 @Controller('follow')
 export class FollowController {
   constructor(private readonly followService: FollowService) {}
 
-  @Post()
-  create(@Body() createFollowDto: CreateFollowDto) {
-    return this.followService.create(createFollowDto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post(':userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Follow a user' })
+  @ApiResponse({ status: 200, description: 'User followed successfully' })
+  async follow(
+    @GetUser('public_id') followerId: string,
+    @Param('userId') followedId: string,
+  ) {
+    await this.followService.follow(followerId, followedId);
+    return { success: true };
   }
 
-  @Get()
-  findAll() {
-    return this.followService.findAll();
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Delete(':userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unfollow a user' })
+  @ApiResponse({ status: 200, description: 'User unfollowed successfully' })
+  async unfollow(
+    @GetUser('public_id') followerId: string,
+    @Param('userId') followedId: string,
+  ) {
+    await this.followService.unfollow(followerId, followedId);
+    return { success: true };
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.followService.findOne(+id);
+  @Get(':userId/followers')
+  @ApiOperation({ summary: 'Get followers of a user (Paginated)' })
+  @ApiResponse({ status: 200, type: PaginatedFollowResponseDto })
+  async getFollowers(
+    @Param('userId') userId: string,
+    @Query('cursor') cursor?: string,
+  ): Promise<PaginatedFollowResponseDto> {
+    const cursorId = cursor ? parseInt(cursor, 10) : null;
+    return await this.followService.getFollowers(userId, cursorId);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateFollowDto: UpdateFollowDto) {
-    return this.followService.update(+id, updateFollowDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.followService.remove(+id);
+  @Get(':userId/following')
+  @ApiOperation({ summary: 'Get users a user is following (Paginated)' })
+  @ApiResponse({ status: 200, type: PaginatedFollowResponseDto })
+  async getFollowing(
+    @Param('userId') userId: string,
+    @Query('cursor') cursor?: string,
+  ): Promise<PaginatedFollowResponseDto> {
+    const cursorId = cursor ? parseInt(cursor, 10) : null;
+    return await this.followService.getFollowing(userId, cursorId);
   }
 }
