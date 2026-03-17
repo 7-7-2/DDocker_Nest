@@ -1,42 +1,54 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { PostService } from './post.service';
-import { CreatePostDto } from './dto/create-post.dto';
-import { UpdatePostDto } from './dto/update-post.dto';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
+import { GetUser } from '../../auth/decorators/get-user.decorator';
+import {
+  PostResponseDto,
+  PaginatedPostResponseDto,
+  SocialCountsResponseDto,
+} from './dto/post-response.dto';
 
+@ApiTags('posts')
 @Controller('posts')
 export class PostController {
   constructor(private readonly postService: PostService) {}
 
-  @Post()
-  create(@Body() createPostDto: CreatePostDto) {
-    return this.postService.create(createPostDto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('following/:cursor')
+  @ApiOperation({ summary: 'Get social feed from followed users (Paginated)' })
+  @ApiResponse({ status: 200, type: PaginatedPostResponseDto })
+  async getFollowingPosts(
+    @GetUser('public_id') userId: string,
+    @Param('cursor') cursor: string,
+  ): Promise<PaginatedPostResponseDto> {
+    const cursorStr = cursor === 'first' ? null : cursor;
+    return await this.postService.getFollowingPosts(userId, cursorStr);
   }
 
-  @Get()
-  findAll() {
-    return this.postService.findAll();
+  @Get(':postId/counts')
+  @ApiOperation({
+    summary: 'Get interaction counts (likes/comments) for a post',
+  })
+  @ApiResponse({ status: 200, type: SocialCountsResponseDto })
+  async getPostSocialCounts(
+    @Param('postId') postId: string,
+  ): Promise<SocialCountsResponseDto> {
+    return await this.postService.getStatsWithFallback(postId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.postService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updatePostDto: UpdatePostDto) {
-    return this.postService.update(+id, updatePostDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.postService.remove(+id);
+  @Get(':postId')
+  @ApiOperation({ summary: 'Get single post details' })
+  @ApiResponse({ status: 200, type: PostResponseDto })
+  async getPostDetail(
+    @Param('postId') postId: string,
+  ): Promise<PostResponseDto> {
+    return await this.postService.getPostDetail(postId);
   }
 }
