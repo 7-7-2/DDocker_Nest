@@ -156,6 +156,22 @@ export class CaffeineRepository extends BaseRepository {
     ]);
   }
 
+  async softDeleteIntake(
+    intakeId: number,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      UPDATE caffeine_intake 
+      SET deleted_at = CURRENT_TIMESTAMP 
+      WHERE id = ? AND deleted_at IS NULL
+    `;
+    if (queryRunner) {
+      await queryRunner.query(query, [intakeId]);
+    } else {
+      await this.mysql.execute(query, [intakeId]);
+    }
+  }
+
   async getQueryRunner() {
     return this.mysql.getQueryRunner();
   }

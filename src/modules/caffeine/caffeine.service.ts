@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { QueryRunner } from 'typeorm';
 import { CreateCaffeineDto } from './dto/create-caffeine.dto';
 import { CaffeineRepository } from './caffeine.repository';
 import {
@@ -23,10 +24,18 @@ export class CaffeineService {
 
   constructor(private readonly caffeineRepository: CaffeineRepository) {}
 
-  async logIntake(userId: string, dto: CreateCaffeineDto): Promise<number> {
-    const queryRunner = await this.caffeineRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+  async logIntake(
+    userId: string,
+    dto: CreateCaffeineDto,
+    externalQueryRunner?: QueryRunner,
+  ): Promise<number> {
+    const queryRunner =
+      externalQueryRunner || (await this.caffeineRepository.getQueryRunner());
+
+    if (!externalQueryRunner) {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+    }
 
     try {
       const intakeId = await this.caffeineRepository.insertIntake(
@@ -48,17 +57,24 @@ export class CaffeineService {
         queryRunner,
       );
 
-      await queryRunner.commitTransaction();
+      if (!externalQueryRunner) {
+        await queryRunner.commitTransaction();
+      }
+
       this.logger.log(`Intake ${intakeId} logged for user ${userId}`);
       return intakeId;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (!externalQueryRunner) {
+        await queryRunner.rollbackTransaction();
+      }
       this.logger.error(`Failed to log intake for user ${userId}`, error);
       throw new InternalServerErrorException(
         'Failed to record caffeine intake',
       );
     } finally {
-      await queryRunner.release();
+      if (!externalQueryRunner) {
+        await queryRunner.release();
+      }
     }
   }
 

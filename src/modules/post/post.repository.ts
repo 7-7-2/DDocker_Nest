@@ -3,6 +3,7 @@ import { BaseRepository } from '../../common/database/base.repository';
 import { MysqlService } from '../../providers/mysql/mysql.service';
 import { PostStatsRow } from './entities/post.entity';
 import { PostDetailRow, PostFeedRow } from './entities/post-query.entity';
+import { QueryRunner } from 'typeorm';
 
 @Injectable()
 export class PostRepository extends BaseRepository {
@@ -64,5 +65,73 @@ export class PostRepository extends BaseRepository {
     `;
     const results = await this.mysql.query<PostStatsRow>(query, [postId]);
     return results[0];
+  }
+
+  async insertPost(
+    data: {
+      user_id: string;
+      caffeine_intake_id: number;
+      photo?: string;
+      public_id: string;
+      description?: string;
+      visibility: number;
+    },
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      INSERT INTO post (
+        user_id, caffeine_intake_id, photo, 
+        public_id, description, visibility
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    const params = [
+      data.user_id,
+      data.caffeine_intake_id,
+      data.photo || null,
+      data.public_id,
+      data.description || null,
+      data.visibility,
+    ];
+
+    if (queryRunner) {
+      await queryRunner.query(query, params);
+    } else {
+      await this.mysql.execute(query, params);
+    }
+  }
+
+  async insertPostStats(
+    postId: string,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      INSERT INTO post_stats (post_id, like_count, comment_count) 
+      VALUES (?, 0, 0)
+    `;
+    if (queryRunner) {
+      await queryRunner.query(query, [postId]);
+    } else {
+      await this.mysql.execute(query, [postId]);
+    }
+  }
+
+  async softDeletePost(
+    postId: string,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      UPDATE post 
+      SET deleted_at = CURRENT_TIMESTAMP 
+      WHERE public_id = ? AND deleted_at IS NULL
+    `;
+    if (queryRunner) {
+      await queryRunner.query(query, [postId]);
+    } else {
+      await this.mysql.execute(query, [postId]);
+    }
+  }
+
+  async getQueryRunner() {
+    return this.mysql.getQueryRunner();
   }
 }
