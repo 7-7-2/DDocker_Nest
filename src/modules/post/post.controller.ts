@@ -1,4 +1,12 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Post,
+  Body,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { PostService } from './post.service';
 import {
   ApiTags,
@@ -13,11 +21,25 @@ import {
   PaginatedPostResponseDto,
   SocialCountsResponseDto,
 } from './dto/post-response.dto';
+import { CreatePostDto } from './dto/create-post.dto';
 
 @ApiTags('posts')
 @Controller('posts')
 export class PostController {
   constructor(private readonly postService: PostService) {}
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('register')
+  @ApiOperation({ summary: 'Register a new post with caffeine intake' })
+  @ApiResponse({ status: 201, description: 'Post registered successfully' })
+  async registerPost(
+    @GetUser('public_id') userId: string,
+    @Body() dto: CreatePostDto,
+  ): Promise<{ success: boolean }> {
+    await this.postService.registerPost(userId, dto);
+    return { success: true };
+  }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -50,5 +72,18 @@ export class PostController {
     @Param('postId') postId: string,
   ): Promise<PostResponseDto> {
     return await this.postService.getPostDetail(postId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Delete(':postId')
+  @ApiOperation({ summary: 'Delete a post and its caffeine intake' })
+  @ApiResponse({ status: 200, description: 'Post deleted successfully' })
+  async deletePost(
+    @GetUser('public_id') userId: string,
+    @Param('postId') postId: string,
+  ): Promise<{ success: boolean }> {
+    await this.postService.deletePost(userId, postId);
+    return { success: true };
   }
 }
