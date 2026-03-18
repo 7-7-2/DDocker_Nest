@@ -60,6 +60,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.redisClient.del(key);
   }
 
+  async sadd(key: string, ...members: (string | number)[]): Promise<number> {
+    return await this.redisClient.sadd(key, ...members);
+  }
+
+  async srem(key: string, ...members: (string | number)[]): Promise<number> {
+    return await this.redisClient.srem(key, ...members);
+  }
+
+  async sismember(key: string, member: string | number): Promise<boolean> {
+    const result = await this.redisClient.sismember(key, member);
+    return result === 1;
+  }
+
   get client(): Redis {
     return this.redisClient;
   }
