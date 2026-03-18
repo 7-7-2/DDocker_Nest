@@ -1,42 +1,66 @@
 import {
   Controller,
-  Get,
   Post,
-  Body,
-  Patch,
-  Param,
   Delete,
+  Get,
+  Param,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { LikeService } from './like.service';
-import { CreateLikeDto } from './dto/create-like.dto';
-import { UpdateLikeDto } from './dto/update-like.dto';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
+import { GetUser } from '../../auth/decorators/get-user.decorator';
 
+@ApiTags('like')
 @Controller('likes')
 export class LikeController {
   constructor(private readonly likeService: LikeService) {}
 
-  @Post()
-  create(@Body() createLikeDto: CreateLikeDto) {
-    return this.likeService.create(createLikeDto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post(':postId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Like a post' })
+  @ApiResponse({ status: 200, description: 'Post liked' })
+  async likePost(
+    @GetUser('public_id') userId: string,
+    @Param('postId') postId: string,
+  ) {
+    await this.likeService.likePost(userId, postId);
+    return { success: true };
   }
 
-  @Get()
-  findAll() {
-    return this.likeService.findAll();
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Delete(':postId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unlike a post' })
+  @ApiResponse({ status: 200, description: 'Post unliked' })
+  async unlikePost(
+    @GetUser('public_id') userId: string,
+    @Param('postId') postId: string,
+  ) {
+    await this.likeService.unlikePost(userId, postId);
+    return { success: true };
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.likeService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateLikeDto: UpdateLikeDto) {
-    return this.likeService.update(+id, updateLikeDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.likeService.remove(+id);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get(':postId')
+  @ApiOperation({ summary: 'Check if current user liked a post' })
+  @ApiResponse({ status: 200, description: 'Returns boolean liked status' })
+  async isLiked(
+    @GetUser('public_id') userId: string,
+    @Param('postId') postId: string,
+  ): Promise<{ liked: boolean }> {
+    const liked = await this.likeService.isLiked(userId, postId);
+    return { liked };
   }
 }
