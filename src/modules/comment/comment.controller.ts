@@ -38,9 +38,10 @@ export class CommentController {
   @ApiResponse({ status: 200, description: 'Comment added' })
   async createComment(
     @GetUser('public_id') userId: string,
+    @GetUser('nickname') nickname: string,
     @Body() dto: CreateCommentDto,
   ) {
-    await this.commentService.createComment(userId, dto);
+    await this.commentService.createComment(userId, nickname, dto);
     return { success: true };
   }
 

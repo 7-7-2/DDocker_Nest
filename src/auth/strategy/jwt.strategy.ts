@@ -19,7 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const user = await this.userService.findByPublicId(payload.sub);
+    const user = await this.userService.getAuthUserByPublicId(payload.sub);
 
     if (!user) {
       throw new UnauthorizedException('User account is inactive or deleted');

@@ -7,6 +7,7 @@ import {
 import Redis from 'ioredis';
 import { ConfigType } from '@nestjs/config';
 import redisConfig from '../../config/redis.config';
+import { Observable } from 'rxjs';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -75,5 +76,37 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   get client(): Redis {
     return this.redisClient;
+  }
+
+  duplicate(): Redis {
+    return this.redisClient.duplicate();
+  }
+
+  fromChannel(channel: string): Observable<string> {
+    return new Observable<string>((subscriber) => {
+      const redisSubscriber = this.duplicate();
+
+      redisSubscriber
+        .subscribe(channel)
+        .then(() => {
+          redisSubscriber.on('message', (chan, message) => {
+            if (chan === channel) {
+              subscriber.next(message);
+            }
+          });
+        })
+        .catch((err) => {
+          subscriber.error(err);
+        });
+
+      redisSubscriber.on('error', (err) => {
+        subscriber.error(err);
+      });
+
+      return () => {
+        redisSubscriber.unsubscribe(channel).catch(() => {});
+        redisSubscriber.quit().catch(() => {});
+      };
+    });
   }
 }

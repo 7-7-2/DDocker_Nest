@@ -14,12 +14,27 @@ import {
   CommentWithAuthorRow,
   ReplyWithAuthorRow,
 } from './entities/comment.entity';
+import { PostRepository } from '../post/post.repository';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class CommentService {
-  constructor(private readonly commentRepository: CommentRepository) {}
+  constructor(
+    private readonly commentRepository: CommentRepository,
+    private readonly postRepository: PostRepository,
+    private readonly notificationService: NotificationService,
+  ) {}
 
-  async createComment(userId: string, dto: CreateCommentDto): Promise<void> {
+  async createComment(
+    userId: string,
+    commenterNickname: string,
+    dto: CreateCommentDto,
+  ): Promise<void> {
+    const post = await this.postRepository.findPostDetail(dto.postId);
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
     const queryRunner = await this.commentRepository.getQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -40,8 +55,19 @@ export class CommentService {
       );
 
       await queryRunner.commitTransaction();
+
+      if (userId !== post.user_id) {
+        await this.notificationService.pushNotification(post.user_id, {
+          type: 'comment',
+          senderId: userId,
+          nickname: commenterNickname,
+          postId: dto.postId,
+          time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
+        });
+      }
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException('Failed to add comment');
     } finally {
       await queryRunner.release();

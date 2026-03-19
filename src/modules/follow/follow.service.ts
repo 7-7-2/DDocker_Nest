@@ -9,12 +9,20 @@ import {
   PaginatedFollowResponseDto,
   FollowUserItemDto,
 } from './dto/follow-list.dto';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class FollowService {
-  constructor(private readonly followRepository: FollowRepository) {}
+  constructor(
+    private readonly followRepository: FollowRepository,
+    private readonly notificationService: NotificationService,
+  ) {}
 
-  async follow(followerId: string, followedId: string): Promise<void> {
+  async follow(
+    followerId: string,
+    followerNickname: string,
+    followedId: string,
+  ): Promise<void> {
     if (followerId === followedId) {
       throw new BadRequestException('You cannot follow yourself');
     }
@@ -28,6 +36,13 @@ export class FollowService {
     }
 
     await this.followRepository.follow(followerId, followedId);
+
+    await this.notificationService.pushNotification(followedId, {
+      type: 'follow',
+      senderId: followerId,
+      nickname: followerNickname,
+      time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
+    });
   }
 
   async unfollow(followerId: string, followedId: string): Promise<void> {

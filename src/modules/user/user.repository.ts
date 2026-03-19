@@ -5,9 +5,6 @@ import { UserRow } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryRunner } from 'typeorm';
 
-/**
- * Raw database result combining user and their stats.
- */
 export interface UserWithStatsRow extends UserRow {
   sum: number;
 }
@@ -70,9 +67,19 @@ export class UserRepository extends BaseRepository {
     }
   }
 
-  /**
-   * findByPublicId using explicit projection to avoid SELECT *.
-   */
+  async findAuthUserByPublicId(
+    publicId: string,
+  ): Promise<Pick<UserRow, 'public_id' | 'nickname'> | null> {
+    const query = `
+      SELECT public_id, nickname 
+      FROM user 
+      WHERE public_id = ? AND deleted_at IS NULL
+      LIMIT 1
+    `;
+    const results = await this.mysql.query<UserRow>(query, [publicId]);
+    return results[0] || null;
+  }
+
   async findByPublicId(publicId: string): Promise<UserRow | null> {
     const query = `
       SELECT 
@@ -86,9 +93,6 @@ export class UserRepository extends BaseRepository {
     return results[0] || null;
   }
 
-  /**
-   * findByEmailAndProvider using explicit projection and index-friendly WHERE.
-   */
   async findByEmailAndProvider(
     email: string,
     social: string,
@@ -105,9 +109,6 @@ export class UserRepository extends BaseRepository {
     return results[0] || null;
   }
 
-  /**
-   * findUserWithStats using explicit projection.
-   */
   async findUserWithStats(publicId: string): Promise<UserWithStatsRow | null> {
     const query = `
       SELECT 
