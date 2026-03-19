@@ -31,9 +31,10 @@ export class LikeController {
   @ApiResponse({ status: 200, description: 'Post liked' })
   async likePost(
     @GetUser('public_id') userId: string,
+    @GetUser('nickname') nickname: string,
     @Param('postId') postId: string,
   ) {
-    await this.likeService.likePost(userId, postId);
+    await this.likeService.likePost(userId, nickname, postId);
     return { success: true };
   }
 

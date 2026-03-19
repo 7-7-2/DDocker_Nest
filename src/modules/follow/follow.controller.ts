@@ -33,9 +33,10 @@ export class FollowController {
   @ApiResponse({ status: 200, description: 'User followed successfully' })
   async follow(
     @GetUser('public_id') followerId: string,
+    @GetUser('nickname') nickname: string,
     @Param('userId') followedId: string,
   ) {
-    await this.followService.follow(followerId, followedId);
+    await this.followService.follow(followerId, nickname, followedId);
     return { success: true };
   }
 

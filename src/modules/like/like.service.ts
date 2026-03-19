@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { LikeRepository } from './like.repository';
 import { RedisService } from '../../providers/redis/redis.service';
+import { PostRepository } from '../post/post.repository';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class LikeService {
@@ -14,12 +16,23 @@ export class LikeService {
   constructor(
     private readonly likeRepository: LikeRepository,
     private readonly redisService: RedisService,
+    private readonly postRepository: PostRepository,
+    private readonly notificationService: NotificationService,
   ) {}
 
-  async likePost(userId: string, postId: string): Promise<void> {
+  async likePost(
+    userId: string,
+    likerNickname: string,
+    postId: string,
+  ): Promise<void> {
     const isLiked = await this.isLiked(userId, postId);
     if (isLiked) {
       throw new ConflictException('Already liked this post');
+    }
+
+    const post = await this.postRepository.findPostDetail(postId);
+    if (!post) {
+      throw new NotFoundException('Post not found');
     }
 
     const queryRunner = await this.likeRepository.getQueryRunner();
@@ -33,8 +46,20 @@ export class LikeService {
       await queryRunner.commitTransaction();
 
       await this.redisService.sadd(`${this.REDIS_PREFIX}${postId}`, userId);
+
+      // Send notification if not self
+      if (userId !== post.user_id) {
+        await this.notificationService.pushNotification(post.user_id, {
+          type: 'like',
+          senderId: userId,
+          nickname: likerNickname,
+          postId: postId,
+          time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
+        });
+      }
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException('Failed to like post');
     } finally {
       await queryRunner.release();

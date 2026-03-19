@@ -8,6 +8,6 @@ import { CaffeineModule } from '../caffeine/caffeine.module';
   imports: [CaffeineModule],
   controllers: [PostController],
   providers: [PostService, PostRepository],
-  exports: [PostService],
+  exports: [PostService, PostRepository],
 })
 export class PostModule {}
