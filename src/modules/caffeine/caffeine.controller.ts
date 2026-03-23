@@ -24,7 +24,7 @@ import {
   WeeklyStatsResponseDto,
 } from './dto/caffeine-stats.dto';
 
-@ApiTags('caffeine')
+@ApiTags('Caffeine')
 @Controller('caffeine')
 export class CaffeineController {
   constructor(private readonly caffeineService: CaffeineService) {}
@@ -33,7 +33,7 @@ export class CaffeineController {
   @ApiBearerAuth()
   @Post('intake')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Log a new caffeine intake' })
+  @ApiOperation({ summary: '빠르게 기록하기(caffeine_intake)' })
   @ApiResponse({
     status: 201,
     description: 'Intake logged and user stats updated',
@@ -55,7 +55,7 @@ export class CaffeineController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('today')
-  @ApiOperation({ summary: "Get today's consumption summary for main page" })
+  @ApiOperation({ summary: '오늘 카페인 섭취(메인 페이지)' })
   @ApiResponse({ status: 200, type: TodayCaffeineResponseDto })
   async getTodayConsumption(
     @GetUser('public_id') userId: string,
@@ -66,7 +66,7 @@ export class CaffeineController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('stats/weekly')
-  @ApiOperation({ summary: 'Get 6-week trend data (cups per week)' })
+  @ApiOperation({ summary: '6주 섭취 동향(주당 몇 잔)' })
   @ApiResponse({ status: 200, type: WeeklyStatsResponseDto })
   async getWeeklyTrend(
     @GetUser('public_id') userId: string,
@@ -78,7 +78,7 @@ export class CaffeineController {
   @ApiBearerAuth()
   @Get('calendar')
   @ApiOperation({
-    summary: 'Get consolidated monthly view (Summary + Details)',
+    summary: '섭취기록 달력 조회',
   })
   @ApiResponse({ status: 200, type: CaffeineMonthlyViewDto })
   async getMonthlyView(

@@ -22,20 +22,20 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 
-@ApiTags('users')
+@ApiTags('Users')
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Register a new user after OAuth' })
+  @ApiOperation({ summary: 'OAuth 이후 새 유저 등록' })
   @ApiResponse({ status: 201, description: 'User successfully initialized' })
   async setUserInit(@Body() createUserDto: CreateUserDto) {
     return await this.userService.setUserInit(createUserDto);
   }
 
   @Get('check')
-  @ApiOperation({ summary: 'Check if a nickname is already taken' })
+  @ApiOperation({ summary: '닉네임 존재여부 확인' })
   @ApiResponse({
     status: 200,
     description: 'Returns true if nickname exists, false otherwise',
@@ -47,14 +47,14 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Get('userInfo')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current logged-in user profile info' })
+  @ApiOperation({ summary: '본인 정보 확인' })
   @ApiResponse({ status: 200, type: UserResponseDto })
   async getMyInfo(@GetUser('public_id') userId: string) {
     return await this.userService.getUserInfo(userId);
   }
 
   @Get(':userId/userInfo')
-  @ApiOperation({ summary: 'Get another user profile info' })
+  @ApiOperation({ summary: '유저 정보 확인(본인 제외)' })
   @ApiResponse({ status: 200, type: UserResponseDto })
   async getUserInfo(@Param('userId') userId: string) {
     return await this.userService.getUserInfo(userId);
@@ -63,7 +63,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Patch('userInfo')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update current user profile' })
+  @ApiOperation({ summary: '본인 정보 업데이트' })
   @ApiResponse({ status: 200, description: 'Profile updated' })
   async editProfile(
     @GetUser('public_id') userId: string,
@@ -75,7 +75,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Delete(':social')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete current user account (Soft Delete)' })
+  @ApiOperation({ summary: '회원 탈퇴 (Soft Delete)' })
   @ApiResponse({ status: 200, description: 'Account soft-deleted' })
   async deleteAccount(@GetUser('public_id') userId: string) {
     return await this.userService.deleteAccount(userId);
