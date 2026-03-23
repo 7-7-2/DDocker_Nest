@@ -21,7 +21,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 
-@ApiTags('favorite')
+@ApiTags('Favorite')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('favorites')
@@ -30,7 +30,7 @@ export class FavoriteController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Add a product to favorites' })
+  @ApiOperation({ summary: '즐겨찾는 메뉴 등록하기' })
   @ApiResponse({ status: 201, description: 'Product added to favorites' })
   async addFavorite(
     @GetUser('public_id') userId: string,
@@ -42,7 +42,7 @@ export class FavoriteController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove a product from favorites' })
+  @ApiOperation({ summary: '즐겨찾는 메뉴 삭제' })
   @ApiResponse({ status: 200, description: 'Product removed from favorites' })
   async removeFavorite(
     @GetUser('public_id') userId: string,
@@ -53,7 +53,7 @@ export class FavoriteController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get current user favorites' })
+  @ApiOperation({ summary: '즐겨찾기 메뉴 조회' })
   @ApiResponse({ status: 200, type: [FavoriteResponseDto] })
   async getMyFavorites(
     @GetUser('public_id') userId: string,

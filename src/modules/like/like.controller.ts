@@ -18,7 +18,7 @@ import {
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 
-@ApiTags('like')
+@ApiTags('Like')
 @Controller('likes')
 export class LikeController {
   constructor(private readonly likeService: LikeService) {}
@@ -27,7 +27,7 @@ export class LikeController {
   @ApiBearerAuth()
   @Post(':postId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Like a post' })
+  @ApiOperation({ summary: '게시글 좋아요' })
   @ApiResponse({ status: 200, description: 'Post liked' })
   async likePost(
     @GetUser('public_id') userId: string,
@@ -42,7 +42,7 @@ export class LikeController {
   @ApiBearerAuth()
   @Delete(':postId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Unlike a post' })
+  @ApiOperation({ summary: '게시글 좋아요 취소' })
   @ApiResponse({ status: 200, description: 'Post unliked' })
   async unlikePost(
     @GetUser('public_id') userId: string,
@@ -55,7 +55,7 @@ export class LikeController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get(':postId')
-  @ApiOperation({ summary: 'Check if current user liked a post' })
+  @ApiOperation({ summary: '게시글 좋아요 여부 확인' })
   @ApiResponse({ status: 200, description: 'Returns boolean liked status' })
   async isLiked(
     @GetUser('public_id') userId: string,

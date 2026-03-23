@@ -14,10 +14,6 @@ export class BrandService {
     private readonly brandRepository: BrandRepository,
   ) {}
 
-  /**
-   * Fetches the brand data with a Cache-First strategy.
-   * Returns a strictly-typed object: Record<string, BrandMenuItem[]>
-   */
   async getBrandData(): Promise<BrandMenuResponse> {
     const cachedData = await this.cacheManager.get<BrandMenuResponse>(
       this.BRAND_CACHE_KEY,
@@ -36,9 +32,6 @@ export class BrandService {
     return data;
   }
 
-  /**
-   * Re-primes the cache manually.
-   */
   async refreshCache(): Promise<void> {
     this.logger.log('Manually refreshing brand cache...');
     const data = await this.brandRepository.getAggregatedBrandData();

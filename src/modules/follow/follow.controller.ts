@@ -20,7 +20,7 @@ import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { PaginatedFollowResponseDto } from './dto/follow-list.dto';
 
-@ApiTags('follow')
+@ApiTags('Follow')
 @Controller('follow')
 export class FollowController {
   constructor(private readonly followService: FollowService) {}
@@ -29,7 +29,7 @@ export class FollowController {
   @ApiBearerAuth()
   @Post(':userId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Follow a user' })
+  @ApiOperation({ summary: '유저 팔로우' })
   @ApiResponse({ status: 200, description: 'User followed successfully' })
   async follow(
     @GetUser('public_id') followerId: string,
@@ -44,7 +44,7 @@ export class FollowController {
   @ApiBearerAuth()
   @Delete(':userId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Unfollow a user' })
+  @ApiOperation({ summary: '유저 언팔로우' })
   @ApiResponse({ status: 200, description: 'User unfollowed successfully' })
   async unfollow(
     @GetUser('public_id') followerId: string,
@@ -55,7 +55,7 @@ export class FollowController {
   }
 
   @Get(':userId/followers')
-  @ApiOperation({ summary: 'Get followers of a user (Paginated)' })
+  @ApiOperation({ summary: '유저 팔로워 조회 (Paginated)' })
   @ApiResponse({ status: 200, type: PaginatedFollowResponseDto })
   async getFollowers(
     @Param('userId') userId: string,
@@ -66,7 +66,7 @@ export class FollowController {
   }
 
   @Get(':userId/following')
-  @ApiOperation({ summary: 'Get users a user is following (Paginated)' })
+  @ApiOperation({ summary: '팔로잉 중 유저 조회 (Paginated)' })
   @ApiResponse({ status: 200, type: PaginatedFollowResponseDto })
   async getFollowing(
     @Param('userId') userId: string,

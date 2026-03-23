@@ -23,7 +23,7 @@ import {
 } from './dto/post-response.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 
-@ApiTags('posts')
+@ApiTags('Posts')
 @Controller('posts')
 export class PostController {
   constructor(private readonly postService: PostService) {}
@@ -31,7 +31,7 @@ export class PostController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('register')
-  @ApiOperation({ summary: 'Register a new post with caffeine intake' })
+  @ApiOperation({ summary: 'caffeine_intake 포함 포스트 동록' })
   @ApiResponse({ status: 201, description: 'Post registered successfully' })
   async registerPost(
     @GetUser('public_id') userId: string,
@@ -44,7 +44,7 @@ export class PostController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('following/:cursor')
-  @ApiOperation({ summary: 'Get social feed from followed users (Paginated)' })
+  @ApiOperation({ summary: '팔로잉 중인 유저들 포스트 조회(Paginated)' })
   @ApiResponse({ status: 200, type: PaginatedPostResponseDto })
   async getFollowingPosts(
     @GetUser('public_id') userId: string,
@@ -56,7 +56,7 @@ export class PostController {
 
   @Get(':postId/counts')
   @ApiOperation({
-    summary: 'Get interaction counts (likes/comments) for a post',
+    summary: '게시글 좋아요/댓글 수 조회',
   })
   @ApiResponse({ status: 200, type: SocialCountsResponseDto })
   async getPostSocialCounts(
@@ -66,7 +66,7 @@ export class PostController {
   }
 
   @Get(':postId')
-  @ApiOperation({ summary: 'Get single post details' })
+  @ApiOperation({ summary: '단일 게시글 상세 조회' })
   @ApiResponse({ status: 200, type: PostResponseDto })
   async getPostDetail(
     @Param('postId') postId: string,
@@ -77,7 +77,7 @@ export class PostController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Delete(':postId')
-  @ApiOperation({ summary: 'Delete a post and its caffeine intake' })
+  @ApiOperation({ summary: 'caffeine_intake 포함 게시글 삭제 (Soft Delete)' })
   @ApiResponse({ status: 200, description: 'Post deleted successfully' })
   async deletePost(
     @GetUser('public_id') userId: string,

@@ -25,7 +25,7 @@ import {
   ReplyResponseDto,
 } from './dto/comment.dto';
 
-@ApiTags('comments')
+@ApiTags('Comments')
 @Controller('comments')
 export class CommentController {
   constructor(private readonly commentService: CommentService) {}
@@ -34,7 +34,7 @@ export class CommentController {
   @ApiBearerAuth()
   @Post()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Add a top-level comment to a post' })
+  @ApiOperation({ summary: '게시글 댓글 작성' })
   @ApiResponse({ status: 200, description: 'Comment added' })
   async createComment(
     @GetUser('public_id') userId: string,
@@ -49,7 +49,7 @@ export class CommentController {
   @ApiBearerAuth()
   @Post('reply')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Add a nested reply to a comment' })
+  @ApiOperation({ summary: '댓글 밑 답글 작성' })
   @ApiResponse({ status: 200, description: 'Reply added' })
   async createReply(
     @GetUser('public_id') userId: string,
@@ -60,7 +60,7 @@ export class CommentController {
   }
 
   @Get('post/:postId')
-  @ApiOperation({ summary: 'Get all comments for a post' })
+  @ApiOperation({ summary: '게시글 댓글 조회(답글 제외)' })
   @ApiResponse({ status: 200, type: [CommentResponseDto] })
   async getCommentsByPost(
     @Param('postId') postId: string,
@@ -69,7 +69,7 @@ export class CommentController {
   }
 
   @Get(':commentId/replies')
-  @ApiOperation({ summary: 'Get all replies for a comment' })
+  @ApiOperation({ summary: '특정 댓글 밑 답글 전체조회' })
   @ApiResponse({ status: 200, type: [ReplyResponseDto] })
   async getRepliesByComment(
     @Param('commentId') commentId: string,
@@ -82,7 +82,7 @@ export class CommentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Delete(':id')
-  @ApiOperation({ summary: 'Soft-delete a comment' })
+  @ApiOperation({ summary: '댓글 삭제(Soft-delete)' })
   async deleteComment(
     @GetUser('public_id') userId: string,
     @Param('id') id: string,
@@ -94,7 +94,7 @@ export class CommentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Delete('reply/:id')
-  @ApiOperation({ summary: 'Soft-delete a reply' })
+  @ApiOperation({ summary: '답글 삭제(Soft-delete)' })
   async deleteReply(
     @GetUser('public_id') userId: string,
     @Param('id') id: string,
