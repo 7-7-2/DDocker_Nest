@@ -18,4 +18,7 @@ export class UserResponseDto {
 
   @ApiProperty({ description: 'Total caffeine from user_stats table' })
   sum: number;
+
+  @ApiProperty({ description: '0: Mutual, 1: Public' })
+  visibility: number;
 }

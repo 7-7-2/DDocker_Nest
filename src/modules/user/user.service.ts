@@ -43,6 +43,7 @@ export class UserService {
           profile_url: dto.profileUrl,
           bio: dto.aboutMe,
           social: oauthUser.provider,
+          visibility: dto.visibility,
         },
         queryRunner,
       );
@@ -113,6 +114,7 @@ export class UserService {
       bio: row.bio || '',
       favBrandId: row.fav_brand_id || 0,
       sum: row.sum || 0,
+      visibility: row.visibility,
     };
   }
 }

@@ -35,7 +35,39 @@ export class FollowService {
       throw new ConflictException('Already following this user');
     }
 
-    await this.followRepository.follow(followerId, followedId);
+    const isNowMutual = await this.followRepository.isFollowing(
+      followedId,
+      followerId,
+    );
+
+    const queryRunner = await this.followRepository.getQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.followRepository.follow(
+        followerId,
+        followedId,
+        isNowMutual,
+        queryRunner,
+      );
+
+      if (isNowMutual) {
+        await this.followRepository.updateMutualStatus(
+          followedId,
+          followerId,
+          true,
+          queryRunner,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
 
     await this.notificationService.pushNotification(followedId, {
       type: 'follow',
@@ -54,7 +86,34 @@ export class FollowService {
       throw new NotFoundException('You are not following this user');
     }
 
-    await this.followRepository.unfollow(followerId, followedId);
+    const wasMutual = await this.followRepository.isMutual(
+      followerId,
+      followedId,
+    );
+
+    const queryRunner = await this.followRepository.getQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.followRepository.unfollow(followerId, followedId, queryRunner);
+
+      if (wasMutual) {
+        await this.followRepository.updateMutualStatus(
+          followedId,
+          followerId,
+          false,
+          queryRunner,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async getFollowers(

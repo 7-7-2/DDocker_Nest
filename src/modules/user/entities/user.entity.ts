@@ -7,6 +7,7 @@ export interface UserRow {
   fav_brand_id: number | null;
   social: string;
   bio: string | null;
+  visibility: number; // 0: Mutual, 1: Public
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
