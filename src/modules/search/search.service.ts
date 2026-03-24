@@ -1,26 +1,36 @@
 import { Injectable } from '@nestjs/common';
-import { CreateSearchDto } from './dto/create-search.dto';
-import { UpdateSearchDto } from './dto/update-search.dto';
+import { SearchRepository } from './search.repository';
 
 @Injectable()
 export class SearchService {
-  create(createSearchDto: CreateSearchDto) {
-    return 'This action adds a new search';
-  }
+  constructor(private readonly searchRepository: SearchRepository) {}
 
-  findAll() {
-    return `This action returns all search`;
-  }
+  async searchUsers(
+    nickname: string,
+    limit: number = 5,
+    cursorNickname?: string,
+    cursorId?: string,
+  ) {
+    const results = await this.searchRepository.searchUsersByNickname(
+      nickname,
+      limit,
+      cursorNickname,
+      cursorId,
+    );
 
-  findOne(id: number) {
-    return `This action returns a #${id} search`;
-  }
+    const hasNext = results.length === limit;
+    let nextCursor: string | null = null;
 
-  update(id: number, updateSearchDto: UpdateSearchDto) {
-    return `This action updates a #${id} search`;
-  }
+    if (hasNext) {
+      const last = results[results.length - 1];
+      nextCursor = Buffer.from(`${last.nickname}:${last.userId}`).toString(
+        'base64',
+      );
+    }
 
-  remove(id: number) {
-    return `This action removes a #${id} search`;
+    return {
+      results,
+      nextCursor,
+    };
   }
 }

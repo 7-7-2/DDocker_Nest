@@ -1,42 +1,53 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { SearchService } from './search.service';
-import { CreateSearchDto } from './dto/create-search.dto';
-import { UpdateSearchDto } from './dto/update-search.dto';
+import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
+@ApiTags('search')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('search')
 export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
-  @Post()
-  create(@Body() createSearchDto: CreateSearchDto) {
-    return this.searchService.create(createSearchDto);
-  }
-
   @Get()
-  findAll() {
-    return this.searchService.findAll();
-  }
+  @ApiOperation({ summary: '닉네임으로 유저 탐색' })
+  @ApiQuery({ name: 'q', description: 'Nickname search term' })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    description: 'Pagination cursor',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Number of results (default: 5)',
+  })
+  async searchUsers(
+    @Query('q') nickname: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit: number = 5,
+  ) {
+    let cursorNickname: string | undefined;
+    let cursorId: string | undefined;
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.searchService.findOne(+id);
-  }
+    if (cursor) {
+      const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+      const [decodedNickname, decodedId] = decoded.split(':');
+      cursorNickname = decodedNickname;
+      cursorId = decodedId;
+    }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSearchDto: UpdateSearchDto) {
-    return this.searchService.update(+id, updateSearchDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.searchService.remove(+id);
+    return await this.searchService.searchUsers(
+      nickname,
+      Number(limit),
+      cursorNickname,
+      cursorId,
+    );
   }
 }
