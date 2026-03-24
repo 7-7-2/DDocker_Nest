@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { BaseRepository } from '../../common/database/base.repository';
 import { MysqlService } from '../../providers/mysql/mysql.service';
+import { QueryRunner } from 'typeorm/query-runner/QueryRunner';
 
 export interface FollowListRow {
   public_id: string;
@@ -16,20 +17,72 @@ export class FollowRepository extends BaseRepository {
     super(mysql);
   }
 
-  async follow(followerId: string, followedId: string): Promise<void> {
+  async follow(
+    followerId: string,
+    followedId: string,
+    isMutual: boolean = false,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
     const query = `
-      INSERT INTO follows (following_user_id, followed_user_id) 
-      VALUES (?, ?)
+      INSERT INTO follows (following_user_id, followed_user_id, is_mutual) 
+      VALUES (?, ?, ?)
     `;
-    await this.mysql.execute(query, [followerId, followedId]);
+    const params = [followerId, followedId, isMutual ? 1 : 0];
+    if (queryRunner) {
+      await queryRunner.query(query, params);
+    } else {
+      await this.mysql.execute(query, params);
+    }
   }
 
-  async unfollow(followerId: string, followedId: string): Promise<void> {
+  async updateMutualStatus(
+    followingId: string,
+    followedId: string,
+    isMutual: boolean,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      UPDATE follows 
+      SET is_mutual = ? 
+      WHERE following_user_id = ? AND followed_user_id = ?
+    `;
+    const params = [isMutual ? 1 : 0, followingId, followedId];
+    if (queryRunner) {
+      await queryRunner.query(query, params);
+    } else {
+      await this.mysql.execute(query, params);
+    }
+  }
+
+  async unfollow(
+    followerId: string,
+    followedId: string,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
     const query = `
       DELETE FROM follows 
       WHERE following_user_id = ? AND followed_user_id = ?
     `;
-    await this.mysql.execute(query, [followerId, followedId]);
+    const params = [followerId, followedId];
+    if (queryRunner) {
+      await queryRunner.query(query, params);
+    } else {
+      await this.mysql.execute(query, params);
+    }
+  }
+
+  async isMutual(followerId: string, followedId: string): Promise<boolean> {
+    const query = `
+      SELECT is_mutual 
+      FROM follows 
+      WHERE following_user_id = ? AND followed_user_id = ?
+      LIMIT 1
+    `;
+    const results = await this.mysql.query<{ is_mutual: number }>(query, [
+      followerId,
+      followedId,
+    ]);
+    return results[0]?.is_mutual === 1;
   }
 
   async isFollowing(followerId: string, followedId: string): Promise<boolean> {
@@ -61,6 +114,10 @@ export class FollowRepository extends BaseRepository {
     ]);
 
     return +results[0].count === 2;
+  }
+
+  async getQueryRunner() {
+    return this.mysql.getQueryRunner();
   }
 
   async findFollowList(

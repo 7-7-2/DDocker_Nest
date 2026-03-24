@@ -23,4 +23,13 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   profileUrl?: string;
+
+  @ApiProperty({
+    example: 0,
+    description: '0: Mutual, 1: Public',
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  visibility?: number;
 }

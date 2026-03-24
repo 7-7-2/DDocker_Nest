@@ -24,6 +24,7 @@ export class UserRepository extends BaseRepository {
       profile_url?: string;
       bio?: string;
       social: string;
+      visibility: number;
     },
     queryRunner?: QueryRunner,
   ): Promise<void> {
@@ -35,8 +36,9 @@ export class UserRepository extends BaseRepository {
         fav_brand_id, 
         profile_url, 
         bio, 
-        social
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        social,
+        visibility
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const params = [
       data.public_id,
@@ -46,6 +48,7 @@ export class UserRepository extends BaseRepository {
       data.profile_url || null,
       data.bio || null,
       data.social,
+      data.visibility,
     ];
 
     if (queryRunner) {
@@ -84,7 +87,7 @@ export class UserRepository extends BaseRepository {
     const query = `
       SELECT 
         id, public_id, useremail, nickname, profile_url, 
-        fav_brand_id, social, bio, created_at, updated_at, 
+        fav_brand_id, social, bio, visibility, created_at, updated_at, 
         deleted_at
       FROM user 
       WHERE public_id = ? AND deleted_at IS NULL
@@ -100,7 +103,7 @@ export class UserRepository extends BaseRepository {
     const query = `
       SELECT 
         id, public_id, useremail, nickname, profile_url, 
-        fav_brand_id, social, bio, created_at, updated_at, 
+        fav_brand_id, social, bio, visibility, created_at, updated_at, 
         deleted_at
       FROM user 
       WHERE useremail = ? AND social = ? AND deleted_at IS NULL
@@ -117,6 +120,7 @@ export class UserRepository extends BaseRepository {
         u.profile_url, 
         u.bio, 
         u.fav_brand_id,
+        u.visibility,
         us.sum
       FROM user u
       LEFT JOIN user_stats us ON u.public_id = us.user_id

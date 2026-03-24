@@ -43,4 +43,8 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   profileUrl?: string;
+
+  @ApiProperty({ example: 1, description: '0: Mutual, 1: Public' })
+  @IsNumber()
+  visibility: number;
 }
