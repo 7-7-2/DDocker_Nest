@@ -1,0 +1,169 @@
+import { Injectable } from '@nestjs/common';
+import { BaseRepository } from '../../common/database/base.repository';
+import { MysqlService } from '../../providers/mysql/mysql.service';
+
+export interface BrandRankingRow {
+  brandId: number;
+  brandName: string;
+  postCount: number;
+}
+
+export interface PopularPostRow {
+  postId: string;
+  photo: string;
+  productName: string;
+  brandId: number;
+  brandName: string;
+  caffeine: number;
+  shot: number;
+  likeCount: number;
+  nickname?: string;
+  profileUrl?: string;
+  createdAt?: Date;
+}
+
+export interface BrandPopularMenuRow {
+  brandId: number;
+  productName: string;
+  orderCount: number;
+}
+
+@Injectable()
+export class DiscoveryRepository extends BaseRepository {
+  constructor(mysql: MysqlService) {
+    super(mysql);
+  }
+
+  async findBrandRanking(
+    weeklyOnly: boolean = true,
+  ): Promise<BrandRankingRow[]> {
+    const query = `
+      SELECT 
+        b.id as brandId, 
+        b.brand_name as brandName, 
+        COUNT(*) as postCount
+      FROM post p
+      INNER JOIN user u ON p.user_id = u.public_id
+      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
+      INNER JOIN brand b ON i.brand_id = b.id
+      WHERE p.deleted_at IS NULL
+        AND u.deleted_at IS NULL
+        AND p.visibility = 1
+        AND u.visibility = 1
+        ${weeklyOnly ? 'AND p.created_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK)' : ''}
+      GROUP BY b.id, b.brand_name
+      ORDER BY postCount DESC
+      LIMIT 5
+    `;
+    return await this.mysql.query<BrandRankingRow>(query);
+  }
+
+  async findDailyPopular(): Promise<PopularPostRow[]> {
+    const query = `
+      SELECT 
+        p.public_id as postId,
+        p.photo,
+        i.product_name as productName,
+        i.brand_id as brandId,
+        b.brand_name as brandName,
+        i.caffeine,
+        i.shot,
+        ps.like_count as likeCount
+      FROM post p
+      INNER JOIN user u ON p.user_id = u.public_id
+      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
+      INNER JOIN brand b ON i.brand_id = b.id
+      INNER JOIN post_stats ps ON p.public_id = ps.post_id
+      WHERE p.deleted_at IS NULL
+        AND u.deleted_at IS NULL
+        AND p.visibility = 1
+        AND u.visibility = 1
+        AND DATE(p.created_at) = CURDATE()
+      ORDER BY ps.like_count DESC
+      LIMIT 4
+    `;
+    return await this.mysql.query<PopularPostRow>(query);
+  }
+
+  async findBrandRecentPosts(brandId: number): Promise<PopularPostRow[]> {
+    const query = `
+      SELECT 
+        p.public_id as postId,
+        p.photo,
+        i.product_name as productName,
+        i.brand_id as brandId,
+        b.brand_name as brandName,
+        i.caffeine,
+        i.shot,
+        ps.like_count as likeCount,
+        u.nickname,
+        u.profile_url as profileUrl,
+        p.created_at as createdAt
+      FROM post p
+      INNER JOIN user u ON p.user_id = u.public_id
+      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
+      INNER JOIN brand b ON i.brand_id = b.id
+      INNER JOIN post_stats ps ON p.public_id = ps.post_id
+      WHERE p.deleted_at IS NULL
+        AND u.deleted_at IS NULL
+        AND p.visibility = 1
+        AND u.visibility = 1
+        AND i.brand_id = ?
+      ORDER BY p.created_at DESC
+      LIMIT 8
+    `;
+    return await this.mysql.query<PopularPostRow>(query, [brandId]);
+  }
+
+  async findBrandPopularPosts(brandId: number): Promise<PopularPostRow[]> {
+    const query = `
+      SELECT 
+        p.public_id as postId,
+        p.photo,
+        i.product_name as productName,
+        i.brand_id as brandId,
+        b.brand_name as brandName,
+        i.caffeine,
+        i.shot,
+        ps.like_count as likeCount,
+        u.nickname,
+        u.profile_url as profileUrl,
+        p.created_at as createdAt
+      FROM post p
+      INNER JOIN user u ON p.user_id = u.public_id
+      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
+      INNER JOIN brand b ON i.brand_id = b.id
+      INNER JOIN post_stats ps ON p.public_id = ps.post_id
+      WHERE p.deleted_at IS NULL
+        AND u.deleted_at IS NULL
+        AND p.visibility = 1
+        AND u.visibility = 1
+        AND i.brand_id = ?
+      ORDER BY ps.like_count DESC
+      LIMIT 8
+    `;
+    return await this.mysql.query<PopularPostRow>(query, [brandId]);
+  }
+
+  async findWeeklyPopularBrandMenu(
+    brandId: number,
+  ): Promise<BrandPopularMenuRow | undefined> {
+    const query = `
+      SELECT 
+        i.brand_id as brandId,
+        i.product_name as productName,
+        COUNT(*) as orderCount
+      FROM caffeine_intake i
+      WHERE i.brand_id = ?
+        AND i.deleted_at IS NULL
+        AND i.created_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK)
+      GROUP BY i.brand_id, i.product_name
+      ORDER BY orderCount DESC
+      LIMIT 1
+    `;
+    const results = await this.mysql.query<BrandPopularMenuRow>(query, [
+      brandId,
+    ]);
+    return results[0];
+  }
+}
