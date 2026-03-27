@@ -8,8 +8,11 @@ import {
   Delete,
   Query,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { UserService } from './user.service';
+import { PostService } from '../post/post.service';
+import { UserProfilePostsResponseDto } from './dto/user-profile-posts.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
@@ -25,7 +28,10 @@ import { GetUser } from '../../auth/decorators/get-user.decorator';
 @ApiTags('Users')
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly postService: PostService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'OAuth 이후 새 유저 등록' })
@@ -58,6 +64,16 @@ export class UserController {
   @ApiResponse({ status: 200, type: UserResponseDto })
   async getUserInfo(@Param('userId') userId: string) {
     return await this.userService.getUserInfo(userId);
+  }
+
+  @Get(':userId/posts/:page')
+  @ApiOperation({ summary: '유저별 프로필 포스트 그리드 조회 (Paginated)' })
+  @ApiResponse({ status: 200, type: UserProfilePostsResponseDto })
+  async getUserPosts(
+    @Param('userId') userId: string,
+    @Param('page', ParseIntPipe) page: number,
+  ): Promise<UserProfilePostsResponseDto> {
+    return await this.postService.getUserPosts(userId, page);
   }
 
   @UseGuards(JwtAuthGuard)
