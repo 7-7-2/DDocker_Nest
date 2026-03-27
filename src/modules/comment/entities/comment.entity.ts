@@ -4,7 +4,6 @@ export interface CommentRow {
   post_id: string;
   content: string;
   created_at: Date;
-  updated_at: Date;
   deleted_at: Date | null;
 }
 
@@ -15,7 +14,6 @@ export interface ReplyRow {
   post_id: string;
   content: string;
   created_at: Date;
-  updated_at: Date;
   deleted_at: Date | null;
 }
 
