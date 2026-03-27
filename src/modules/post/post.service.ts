@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { PostRepository } from './post.repository';
 import {
@@ -14,7 +15,10 @@ import { PostDetailRow, PostFeedRow } from './entities/post-query.entity';
 import { RedisService } from '../../providers/redis/redis.service';
 import { CaffeineService } from '../caffeine/caffeine.service';
 import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { CaffeineRepository } from '../caffeine/caffeine.repository';
+import { UserProfilePostsResponseDto } from '../user/dto/user-profile-posts.dto';
+import { BrandService } from '../brand/brand.service';
 
 @Injectable()
 export class PostService {
@@ -25,9 +29,15 @@ export class PostService {
     private readonly redisService: RedisService,
     private readonly caffeineService: CaffeineService,
     private readonly caffeineRepository: CaffeineRepository,
+    private readonly brandService: BrandService,
   ) {}
 
   async registerPost(userId: string, dto: CreatePostDto): Promise<void> {
+    const brandId = await this.brandService.resolveBrandId(dto.brandId);
+    if (!brandId) {
+      throw new BadRequestException(`Invalid brand: ${dto.brandId}`);
+    }
+
     const queryRunner = await this.postRepository.getQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -36,7 +46,7 @@ export class PostService {
       const intakeId = await this.caffeineService.logIntake(
         userId,
         {
-          brandId: dto.brandId,
+          brandId: brandId, 
           caffeine: dto.caffeine,
           productName: dto.productName,
           size: dto.size,
@@ -59,6 +69,8 @@ export class PostService {
       );
 
       await this.postRepository.insertPostStats(dto.postId, queryRunner);
+
+      await this.postRepository.updateUserStatsPostCount(userId, 1, queryRunner);
 
       await queryRunner.commitTransaction();
       this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
@@ -99,6 +111,11 @@ export class PostService {
         -post.caffeine,
         queryRunner,
       );
+      await this.postRepository.updateUserStatsPostCount(
+        userId,
+        -1,
+        queryRunner,
+      );
 
       await queryRunner.commitTransaction();
       this.logger.log(`Post ${postId} deleted for user ${userId}`);
@@ -111,6 +128,21 @@ export class PostService {
     }
   }
 
+  async patchPost(
+    userId: string,
+    postId: string,
+    dto: UpdatePostDto,
+  ): Promise<void> {
+    const post = await this.postRepository.findPostDetail(postId);
+    if (!post) throw new NotFoundException('Post not found');
+
+    if (post.user_id !== userId) {
+      throw new InternalServerErrorException('Unauthorized post update');
+    }
+
+    await this.postRepository.patchPost(postId, dto);
+  }
+
   async getPostDetail(postId: string): Promise<PostResponseDto> {
     const stats = await this.getStatsWithFallback(postId);
     const row = await this.postRepository.findPostDetail(postId);
@@ -121,7 +153,7 @@ export class PostService {
 
   async getFollowingPosts(
     userId: string,
-    cursor: string | null,
+    cursor?: string | null,
   ): Promise<PaginatedPostResponseDto> {
     const rows = await this.postRepository.findFollowingPosts(userId, cursor);
 
@@ -165,6 +197,27 @@ export class PostService {
     await this.redisService.set(cacheKey, stats, 300);
 
     return stats;
+  }
+
+  async getUserPosts(
+    userId: string,
+    page: number,
+  ): Promise<UserProfilePostsResponseDto> {
+    const limit = 18;
+    const offset = page * limit;
+
+    const [rows, count] = await Promise.all([
+      this.postRepository.findUserPosts(userId, limit, offset),
+      this.postRepository.findUserPostCount(userId),
+    ]);
+
+    return {
+      allCount: count,
+      posts: rows.map((row) => ({
+        photo: row.photo,
+        postId: row.public_id,
+      })),
+    };
   }
 
   private mapDetailRowToDto(

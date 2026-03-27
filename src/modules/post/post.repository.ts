@@ -31,7 +31,7 @@ export class PostRepository extends BaseRepository {
 
   async findFollowingPosts(
     userId: string,
-    cursorDate: string | null,
+    cursorDate?: string | null,
   ): Promise<PostFeedRow[]> {
     const query = `
       SELECT 
@@ -49,6 +49,8 @@ export class PostRepository extends BaseRepository {
       INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
       WHERE f.following_user_id = ?
         AND p.deleted_at IS NULL
+        AND p.visibility = 1
+        AND (u.visibility = 1 OR f.is_mutual = 1)
         ${cursorDate ? 'AND p.created_at < ?' : ''}
       ORDER BY p.created_at DESC
       LIMIT 10
@@ -112,6 +114,69 @@ export class PostRepository extends BaseRepository {
       await queryRunner.query(query, [postId]);
     } else {
       await this.mysql.execute(query, [postId]);
+    }
+  }
+
+  async patchPost(postId: string, dto: any): Promise<void> {
+    const buildResult = this.buildUpdateQuery('post', dto, 'public_id', postId);
+    if (!buildResult) return;
+
+    await this.mysql.execute(buildResult.query, buildResult.params);
+  }
+
+  async findUserPosts(
+    userId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ photo: string; public_id: string }[]> {
+    const query = `
+      SELECT photo, public_id
+      FROM post
+      WHERE user_id = ? AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    return await this.mysql.query(query, [userId, limit, offset]);
+  }
+
+  async countUserPosts(userId: string): Promise<number> {
+    const query = `
+      SELECT COUNT(*) as count 
+      FROM post 
+      WHERE user_id = ? AND deleted_at IS NULL
+    `;
+    const result = await this.mysql.query<{ count: string }>(query, [userId]);
+    return parseInt(result[0].count, 10);
+  }
+
+  async findUserPostCount(userId: string): Promise<number> {
+    const query = `
+      SELECT post_count 
+      FROM user_stats 
+      WHERE user_id = ?
+    `;
+    const result = await this.mysql.query<{ post_count: number }>(query, [
+      userId,
+    ]);
+    return result[0]?.post_count || 0;
+  }
+
+  async updateUserStatsPostCount(
+    userId: string,
+    increment: number,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      UPDATE user_stats 
+      SET post_count = post_count + ? 
+      WHERE user_id = ?
+    `;
+    const params = [increment, userId];
+
+    if (queryRunner) {
+      await queryRunner.query(query, params);
+    } else {
+      await this.mysql.execute(query, params);
     }
   }
 

@@ -8,10 +8,9 @@ import {
 } from 'class-validator';
 
 export class CreateFavoriteDto {
-  @ApiProperty()
-  @IsNumber()
+  @ApiProperty({ example: 'Starbucks' })
   @IsNotEmpty()
-  brandId: number;
+  brandId: number | string;
 
   @ApiProperty()
   @IsString()

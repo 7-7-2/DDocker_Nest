@@ -6,6 +6,8 @@ import {
   Body,
   Delete,
   UseGuards,
+  Query,
+  Patch,
 } from '@nestjs/common';
 import { PostService } from './post.service';
 import {
@@ -22,6 +24,7 @@ import {
   SocialCountsResponseDto,
 } from './dto/post-response.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 
 @ApiTags('Posts')
 @Controller('posts')
@@ -43,15 +46,14 @@ export class PostController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Get('following/:cursor')
+  @Get('following')
   @ApiOperation({ summary: '팔로잉 중인 유저들 포스트 조회(Paginated)' })
   @ApiResponse({ status: 200, type: PaginatedPostResponseDto })
   async getFollowingPosts(
     @GetUser('public_id') userId: string,
-    @Param('cursor') cursor: string,
+    @Query('cursor') cursor?: string,
   ): Promise<PaginatedPostResponseDto> {
-    const cursorStr = cursor === 'first' ? null : cursor;
-    return await this.postService.getFollowingPosts(userId, cursorStr);
+    return await this.postService.getFollowingPosts(userId, cursor);
   }
 
   @Get(':postId/counts')
@@ -84,6 +86,20 @@ export class PostController {
     @Param('postId') postId: string,
   ): Promise<{ success: boolean }> {
     await this.postService.deletePost(userId, postId);
+    return { success: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Patch(':postId')
+  @ApiOperation({ summary: '게시글 정보 수정' })
+  @ApiResponse({ status: 200, description: 'Post updated successfully' })
+  async patchPost(
+    @GetUser('public_id') userId: string,
+    @Param('postId') postId: string,
+    @Body() dto: UpdatePostDto,
+  ): Promise<{ success: boolean }> {
+    await this.postService.patchPost(userId, postId, dto);
     return { success: true };
   }
 }

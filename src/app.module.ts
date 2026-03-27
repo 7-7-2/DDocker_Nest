@@ -20,6 +20,7 @@ import { CommentModule } from './modules/comment/comment.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { FavoriteModule } from './modules/favorite/favorite.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { R2Module } from './providers/r2/r2.module';
 //Configs
 import serverConfig from './config/server.config';
@@ -94,6 +95,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     AuthModule,
     R2Module,
     StorageModule,
+    DiscoveryModule,
   ],
   controllers: [],
   providers: [

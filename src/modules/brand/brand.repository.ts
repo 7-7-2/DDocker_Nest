@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { MysqlService } from '../../providers/mysql/mysql.service';
+import { BrandRow } from './entities/brand.entity';
 
 export interface BrandMenuItem {
   brand: string;
@@ -33,5 +34,10 @@ export class BrandRepository {
     const results = await this.mysqlService.query<BrandQueryRow>(query);
 
     return results[0]?.coffee_menus;
+  }
+
+  async findAllBrands(): Promise<BrandRow[]> {
+    const query = 'SELECT id, brand_name FROM brand';
+    return await this.mysqlService.query<BrandRow>(query);
   }
 }
