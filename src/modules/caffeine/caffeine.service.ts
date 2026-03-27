@@ -2,10 +2,12 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { QueryRunner } from 'typeorm';
 import { CreateCaffeineDto } from './dto/create-caffeine.dto';
 import { CaffeineRepository } from './caffeine.repository';
+import { BrandService } from '../brand/brand.service';
 import {
   CaffeineMonthlyViewDto,
   CaffeineDetailItemDto,
@@ -22,13 +24,21 @@ import {
 export class CaffeineService {
   private readonly logger = new Logger(CaffeineService.name);
 
-  constructor(private readonly caffeineRepository: CaffeineRepository) {}
+  constructor(
+    private readonly caffeineRepository: CaffeineRepository,
+    private readonly brandService: BrandService,
+  ) {}
 
   async logIntake(
     userId: string,
     dto: CreateCaffeineDto,
     externalQueryRunner?: QueryRunner,
   ): Promise<number> {
+    const brandId = await this.brandService.resolveBrandId(dto.brandId);
+    if (!brandId) {
+      throw new BadRequestException(`Invalid brand: ${dto.brandId}`);
+    }
+
     const queryRunner =
       externalQueryRunner || (await this.caffeineRepository.getQueryRunner());
 
@@ -41,7 +51,7 @@ export class CaffeineService {
       const intakeId = await this.caffeineRepository.insertIntake(
         {
           user_id: userId,
-          brand_id: dto.brandId,
+          brand_id: brandId,
           caffeine: dto.caffeine,
           size: dto.size,
           shot: dto.shot ?? 0,

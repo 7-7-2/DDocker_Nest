@@ -2,10 +2,12 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNumber, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class CreateCaffeineDto {
-  @ApiProperty({ description: 'ID of the coffee brand', example: 12 })
-  @IsNumber()
+  @ApiProperty({
+    description: 'ID or Name of the coffee brand',
+    example: 'Starbucks',
+  })
   @IsNotEmpty()
-  brandId: number;
+  brandId: number | string;
 
   @ApiProperty({ description: 'Caffeine amount in mg', example: 317 })
   @IsNumber()

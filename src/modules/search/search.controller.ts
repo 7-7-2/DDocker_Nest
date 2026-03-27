@@ -8,7 +8,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 
-@ApiTags('search')
+@ApiTags('Search')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('search')

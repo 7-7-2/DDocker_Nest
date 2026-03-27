@@ -1,13 +1,26 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { FavoriteRepository } from './favorite.repository';
 import { CreateFavoriteDto, FavoriteResponseDto } from './dto/favorite.dto';
 import { FavoriteRow } from './entities/favorite.entity';
+import { BrandService } from '../brand/brand.service';
 
 @Injectable()
 export class FavoriteService {
-  constructor(private readonly favoriteRepository: FavoriteRepository) {}
+  constructor(
+    private readonly favoriteRepository: FavoriteRepository,
+    private readonly brandService: BrandService,
+  ) {}
 
   async addFavorite(userId: string, dto: CreateFavoriteDto): Promise<void> {
+    const brandId = await this.brandService.resolveBrandId(dto.brandId);
+    if (!brandId) {
+      throw new BadRequestException(`Invalid brand: ${dto.brandId}`);
+    }
+
     const existing = await this.favoriteRepository.findOne(
       userId,
       dto.productName,
@@ -17,7 +30,7 @@ export class FavoriteService {
     }
 
     await this.favoriteRepository.insertFavorite(userId, {
-      brandId: dto.brandId,
+      brandId: brandId,
       productName: dto.productName,
       caffeine: dto.caffeine,
       size: dto.size,
