@@ -134,10 +134,11 @@ export class CaffeineRepository extends BaseRepository {
   ): Promise<CaffeineMonthlyDetailRow[]> {
     const query = `
       SELECT 
+        i.id,
         DAY(i.created_at) as day,
-        b.brand_name,
+        b.brand_name as brand_name,
         i.caffeine,
-        i.product_name,
+        i.product_name as product_name,
         i.intensity,
         i.shot,
         i.size

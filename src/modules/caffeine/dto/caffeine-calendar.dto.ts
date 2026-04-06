@@ -6,6 +6,7 @@ export interface CaffeineMonthlySummaryRow {
 }
 
 export interface CaffeineMonthlyDetailRow {
+  id: number;
   day: number;
   brand_name: string;
   caffeine: number;
@@ -25,13 +26,16 @@ export class CaffeineSummaryItemDto {
 
 export class CaffeineDetailItemDto {
   @ApiProperty()
-  brandName: string;
+  intakeId: number;
+
+  @ApiProperty()
+  brand: string;
 
   @ApiProperty()
   caffeine: number;
 
   @ApiProperty()
-  productName: string;
+  menu: string;
 
   @ApiProperty()
   intensity: string;

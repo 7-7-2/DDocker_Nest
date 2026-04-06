@@ -8,6 +8,7 @@ export class BrandService {
   private readonly logger = new Logger(BrandService.name);
   private readonly BRAND_CACHE_KEY = 'brand_all_data';
   private readonly BRAND_MAP_KEY = 'brand_id_map';
+  private readonly BRAND_NAME_MAP_KEY = 'brand_name_map';
   private readonly CACHE_TTL = 3600000; // 1 hour
 
   constructor(
@@ -25,24 +26,53 @@ export class BrandService {
     );
 
     if (!brandMap) {
-      brandMap = await this.refreshBrandMap();
+      const maps = await this.refreshBrandMaps();
+      brandMap = maps.idMap;
     }
 
     return brandMap[identifier] || brandMap[identifier.toLowerCase()] || null;
   }
 
-  async refreshBrandMap(): Promise<Record<string, number>> {
-    this.logger.log('Refreshing brand name-to-id map cache...');
+  async resolveBrandName(id: string | number): Promise<string | null> {
+    let nameMap = await this.cacheManager.get<Record<number, string>>(
+      this.BRAND_NAME_MAP_KEY,
+    );
+
+    if (!nameMap) {
+      const maps = await this.refreshBrandMaps();
+      nameMap = maps.nameMap;
+    }
+
+    return (nameMap[id] as string) || null;
+  }
+
+  async refreshBrandMaps(): Promise<{
+    idMap: Record<string, number>;
+    nameMap: Record<number, string>;
+  }> {
+    this.logger.log('Refreshing brand name/id map caches...');
     const brands = await this.brandRepository.findAllBrands();
-    const map: Record<string, number> = {};
+    const idMap: Record<string, number> = {};
+    const nameMap: Record<number, string> = {};
 
     brands.forEach((b) => {
-      map[b.brand_name] = b.id;
-      map[b.brand_name.toLowerCase()] = b.id;
+      idMap[b.brand_name] = b.id;
+      idMap[b.brand_name.toLowerCase()] = b.id;
+      nameMap[b.id] = b.brand_name;
     });
 
-    await this.cacheManager.set(this.BRAND_MAP_KEY, map, this.CACHE_TTL);
-    return map;
+    await this.cacheManager.set(this.BRAND_MAP_KEY, idMap, this.CACHE_TTL);
+    await this.cacheManager.set(
+      this.BRAND_NAME_MAP_KEY,
+      nameMap,
+      this.CACHE_TTL,
+    );
+    return { idMap, nameMap };
+  }
+
+  async refreshBrandMap(): Promise<Record<string, number>> {
+    const { idMap } = await this.refreshBrandMaps();
+    return idMap;
   }
 
   async getBrandData(): Promise<BrandMenuResponse> {

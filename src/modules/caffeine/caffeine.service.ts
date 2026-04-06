@@ -194,9 +194,10 @@ export class CaffeineService {
 
       if (!details[dayKey]) details[dayKey] = [];
       details[dayKey].push({
-        brandName: row.brand_name,
+        intakeId: row.id,
+        brand: row.brand_name,
         caffeine: row.caffeine,
-        productName: row.product_name,
+        menu: row.product_name,
         intensity: row.intensity,
         shot: row.shot,
         size: row.size,
@@ -205,12 +206,13 @@ export class CaffeineService {
       sumsMap[day] = (sumsMap[day] || 0) + row.caffeine;
     });
 
-    const summary: CaffeineSummaryItemDto[] = Object.keys(sumsMap).map(
-      (day) => ({
-        day: parseInt(day, 10),
-        caffeineSum: sumsMap[parseInt(day, 10)],
-      }),
-    );
+    const summary: CaffeineSummaryItemDto[] = Object.keys(sumsMap)
+      .map((day) => parseInt(day, 10))
+      .sort((a, b) => a - b)
+      .map((day) => ({
+        day,
+        caffeineSum: sumsMap[day],
+      }));
 
     return { summary, details };
   }
