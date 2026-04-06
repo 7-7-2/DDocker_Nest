@@ -22,8 +22,8 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
   constructor(private readonly configService: ConfigService) {
     super({
       clientID: configService.getOrThrow<string>('KAKAO_CLIENT_ID'),
-      clientSecret: '', // Kakao often doesn't require this for certain flows, but passing empty string
-      callbackURL: configService.getOrThrow<string>('KAKAO_REDIRECT_URI'),
+      clientSecret: configService.getOrThrow<string>('KAKAO_CLIENT_SECRET'),
+      callbackURL: configService.getOrThrow<string>('KAKAO_CALLBACK_URL'),
     });
   }
 
@@ -34,9 +34,11 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
     done: (err: any, user?: any, info?: any) => void,
   ): void {
     const kakaoProfile = profile as KakaoProfile;
+    const email = kakaoProfile._json?.kakao_account?.email || '';
+
     const user: OAuthUser = {
       provider: 'kakao',
-      email: kakaoProfile._json.kakao_account.email,
+      email: email,
     };
     done(null, user);
   }

@@ -9,6 +9,7 @@ import { JwtStrategy } from './strategy/jwt.strategy';
 import { KakaoStrategy } from './strategy/kakao.strategy';
 import { GoogleStrategy } from './strategy/google.strategy';
 import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
 
 @Module({
   imports: [
@@ -17,12 +18,13 @@ import { AuthService } from './auth.service';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('ACCESS_TOKEN_SECRET'),
-        signOptions: { expiresIn: '60m' },
+        signOptions: { expiresIn: '24H' },
       }),
       inject: [ConfigService],
     }),
     forwardRef(() => UserModule),
   ],
+  controllers: [AuthController],
   providers: [AuthService, JwtStrategy, KakaoStrategy, GoogleStrategy],
   exports: [AuthService, JwtModule, PassportModule],
 })

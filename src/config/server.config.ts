@@ -6,10 +6,12 @@ export interface ServerConfig {
   nodeEnv: string;
   port: number;
   timezone: string;
+  frontendUrl: string;
 }
 
 export default registerAs(ServerConfigName, () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000'),
   timezone: process.env.TZ || 'UTC',
+  frontendUrl: process.env.REDIRECT_URI || 'http://localhost:3000',
 }));
