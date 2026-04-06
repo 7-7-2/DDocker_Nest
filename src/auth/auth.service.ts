@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from '../modules/user/user.service';
@@ -8,12 +8,14 @@ import { RedisService } from '../providers/redis/redis.service';
 import { OAuthUser } from './interfaces/oauth-user.interface';
 import { nanoid } from 'nanoid';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { ServerConfigName, ServerConfig } from '../config/server.config';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly redisService: RedisService,
   ) {}
@@ -56,6 +58,24 @@ export class AuthService {
         status: HttpStatus.CREATED,
       };
     }
+  }
+
+  buildFrontendRedirectUrl(authResult: AuthResponseDto): string {
+    const serverConfig =
+      this.configService.getOrThrow<ServerConfig>(ServerConfigName);
+    const baseUrl = `${serverConfig.frontendUrl}`;
+    const query = new URLSearchParams();
+
+    if (authResult.status === HttpStatus.OK) {
+      query.append('token', `Bearer ${authResult.accessToken!}`);
+      query.append('type', 'login');
+    } else {
+      query.append('socialToken', authResult.socialToken!);
+      query.append('socialEmail', authResult.socialEmail!);
+      query.append('type', 'signup');
+    }
+
+    return `${baseUrl}?${query.toString()}`;
   }
 
   private async createHandoverToken(oauthUser: OAuthUser): Promise<string> {
