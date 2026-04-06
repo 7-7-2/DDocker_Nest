@@ -11,10 +11,10 @@ export class UserResponseDto {
   profileUrl?: string;
 
   @ApiProperty({ required: false })
-  bio?: string;
+  aboutMe?: string;
 
   @ApiProperty({ required: false })
-  favBrandId?: number;
+  brand?: string;
 
   @ApiProperty({ description: 'Total caffeine from user_stats table' })
   sum: number;

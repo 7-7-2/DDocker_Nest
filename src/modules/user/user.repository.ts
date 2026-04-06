@@ -130,6 +130,21 @@ export class UserRepository extends BaseRepository {
     return results[0] || null;
   }
 
+  async findUserFollowCounts(
+    userId: string,
+  ): Promise<{ follower: number; following: number } | null> {
+    const query = `
+      SELECT follower_count as follower, following_count as following
+      FROM user_stats
+      WHERE user_id = ?
+    `;
+    const results = await this.mysql.query<{
+      follower: number;
+      following: number;
+    }>(query, [userId]);
+    return results[0] || null;
+  }
+
   async patchUserProfile(userId: string, dto: UpdateUserDto): Promise<void> {
     const buildResult = this.buildUpdateQuery('user', dto, 'public_id', userId);
     if (!buildResult) return;

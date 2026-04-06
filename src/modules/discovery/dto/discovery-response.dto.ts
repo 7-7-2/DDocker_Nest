@@ -8,7 +8,7 @@ export class BrandRankingDto {
   brandName: string;
 
   @ApiProperty({ example: 120 })
-  postCount: number;
+  intakeCount: number;
 }
 
 export class PopularPostDto {

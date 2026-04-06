@@ -4,6 +4,9 @@ import {
   NotFoundException,
   ConflictException,
   UnauthorizedException,
+  BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -12,21 +15,33 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { RedisService } from '../../providers/redis/redis.service';
 import { OAuthUser } from '../../auth/interfaces/oauth-user.interface';
 import { UserRepository, UserWithStatsRow } from './user.repository';
+import { BrandService } from '../brand/brand.service';
+import { AuthService } from '../../auth/auth.service';
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly redisService: RedisService,
+    private readonly brandService: BrandService,
+    @Inject(forwardRef(() => AuthService))
+    private readonly authService: AuthService,
   ) {}
 
-  async setUserInit(dto: CreateUserDto): Promise<void> {
+  async setUserInit(
+    dto: CreateUserDto,
+  ): Promise<string> {
     const oauthUser = await this.redisService.get<OAuthUser>(
       `auth_handover:${dto.socialToken}`,
     );
 
     if (!oauthUser) {
       throw new UnauthorizedException('Invalid or expired social token');
+    }
+
+    const favBrandId = await this.brandService.resolveBrandId(dto.brand);
+    if (!favBrandId) {
+      throw new BadRequestException(`Invalid brand name: ${dto.brand}`);
     }
 
     const queryRunner = await this.userRepository.getQueryRunner();
@@ -39,11 +54,11 @@ export class UserService {
           public_id: dto.userId,
           useremail: oauthUser.email,
           nickname: dto.nickname,
-          fav_brand_id: dto.favBrandId,
+          fav_brand_id: favBrandId,
           profile_url: dto.profileUrl,
           bio: dto.aboutMe,
           social: oauthUser.provider,
-          visibility: dto.visibility,
+          visibility: dto.visibility ?? 1,
         },
         queryRunner,
       );
@@ -52,6 +67,14 @@ export class UserService {
 
       await queryRunner.commitTransaction();
       await this.redisService.del(`auth_handover:${dto.socialToken}`);
+
+      const user = await this.userRepository.findByPublicId(dto.userId);
+      if (!user) {
+        throw new InternalServerErrorException('Failed to retrieve new user');
+      }
+
+      const loginResult = await this.authService.login(user);
+      return `Bearer ${loginResult.accessToken}`;
     } catch (error) {
       await queryRunner.rollbackTransaction();
 
@@ -59,9 +82,9 @@ export class UserService {
         throw new ConflictException('Nickname or User already exists');
       }
 
-      throw new InternalServerErrorException(
-        'Failed to initialize user profile',
-      );
+      throw error instanceof InternalServerErrorException
+        ? error
+        : new InternalServerErrorException('Failed to initialize user profile');
     } finally {
       await queryRunner.release();
     }
@@ -74,7 +97,7 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    return this.mapToResponseDto(userWithStats);
+    return await this.mapToResponseDto(userWithStats);
   }
 
   async patchUserProfile(userId: string, dto: UpdateUserDto): Promise<void> {
@@ -106,13 +129,26 @@ export class UserService {
     return await this.userRepository.findByEmailAndProvider(email, social);
   }
 
-  private mapToResponseDto(row: UserWithStatsRow): UserResponseDto {
+  async getUserFollowCounts(
+    userId: string,
+  ): Promise<{ follower: number; following: number }> {
+    const counts = await this.userRepository.findUserFollowCounts(userId);
+    return counts || { follower: 0, following: 0 };
+  }
+
+  private async mapToResponseDto(
+    row: UserWithStatsRow,
+  ): Promise<UserResponseDto> {
+    const brandName = row.fav_brand_id
+      ? await this.brandService.resolveBrandName(row.fav_brand_id)
+      : '';
+
     return {
       userId: row.public_id,
       nickname: row.nickname || '',
       profileUrl: row.profile_url || '',
-      bio: row.bio || '',
-      favBrandId: row.fav_brand_id || 0,
+      aboutMe: row.bio || '',
+      brand: brandName || '',
       sum: row.sum || 0,
       visibility: row.visibility,
     };

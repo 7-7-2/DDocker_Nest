@@ -61,6 +61,12 @@ export class FollowService {
         );
       }
 
+      await this.followRepository.incrementFollowCounts(
+        followerId,
+        followedId,
+        queryRunner,
+      );
+
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -106,6 +112,12 @@ export class FollowService {
           queryRunner,
         );
       }
+
+      await this.followRepository.decrementFollowCounts(
+        followerId,
+        followedId,
+        queryRunner,
+      );
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -168,5 +180,13 @@ export class FollowService {
 
   async areMutual(userIdA: string, userIdB: string): Promise<boolean> {
     return await this.followRepository.areMutual(userIdA, userIdB);
+  }
+
+  async getUsernameById(userId: string): Promise<string> {
+    const nickname = await this.followRepository.getUsernameById(userId);
+    if (!nickname) {
+      throw new NotFoundException('User not found');
+    }
+    return nickname;
   }
 }

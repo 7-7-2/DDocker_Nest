@@ -5,7 +5,7 @@ import { MysqlService } from '../../providers/mysql/mysql.service';
 export interface BrandRankingRow {
   brandId: number;
   brandName: string;
-  postCount: number;
+  intakeCount: number;
 }
 
 export interface PopularPostRow {
@@ -41,18 +41,16 @@ export class DiscoveryRepository extends BaseRepository {
       SELECT 
         b.id as brandId, 
         b.brand_name as brandName, 
-        COUNT(*) as postCount
-      FROM post p
-      INNER JOIN user u ON p.user_id = u.public_id
-      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
+        COUNT(i.id) as intakeCount
+      FROM caffeine_intake i
       INNER JOIN brand b ON i.brand_id = b.id
-      WHERE p.deleted_at IS NULL
+      INNER JOIN user u ON i.user_id = u.public_id
+      WHERE i.deleted_at IS NULL
         AND u.deleted_at IS NULL
-        AND p.visibility = 1
         AND u.visibility = 1
-        ${weeklyOnly ? 'AND p.created_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK)' : ''}
+        ${weeklyOnly ? 'AND i.created_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK)' : ''}
       GROUP BY b.id, b.brand_name
-      ORDER BY postCount DESC
+      ORDER BY intakeCount DESC
       LIMIT 5
     `;
     return await this.mysql.query<BrandRankingRow>(query);

@@ -29,9 +29,9 @@ export class CreateUserDto {
   @MaxLength(30)
   nickname: string;
 
-  @ApiProperty({ example: 1, description: 'fav_brand_id from brand table' })
-  @IsNumber()
-  favBrandId: number;
+  @ApiProperty({ example: 'starbucks', description: 'Brand name from FE' })
+  @IsString()
+  brand: string;
 
   @ApiProperty({ example: 'I love espresso!', required: false })
   @IsOptional()
@@ -46,5 +46,6 @@ export class CreateUserDto {
 
   @ApiProperty({ example: 1, description: '0: Mutual, 1: Public' })
   @IsNumber()
-  visibility: number;
+  @IsOptional()
+  visibility?: number;
 }
