@@ -66,14 +66,34 @@ export class UserController {
     return await this.userService.getUserInfo(userId);
   }
 
-  @Get(':userId/posts/:page')
-  @ApiOperation({ summary: '유저별 프로필 포스트 그리드 조회 (Paginated)' })
+  @Get(':userId/follow')
+  @ApiOperation({ summary: '유저 팔로우 수 조회' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns follower and following counts',
+  })
+  async getFollowCounts(@Param('userId') userId: string) {
+    return await this.userService.getUserFollowCounts(userId);
+  }
+
+  @Get(':userId/posts/count')
+  @ApiOperation({ summary: '유저별 포스트 수 조회' })
+  @ApiResponse({ status: 200, description: 'Returns post count' })
+  async getPostCount(@Param('userId') userId: string) {
+    return await this.postService.getUserPostCount(userId);
+  }
+
+  @Get(':userId/posts')
+  @ApiOperation({
+    summary: '유저별 프로필 포스트 조회 (Grid/List, Cursor-based)',
+  })
   @ApiResponse({ status: 200, type: UserProfilePostsResponseDto })
   async getUserPosts(
     @Param('userId') userId: string,
-    @Param('page', ParseIntPipe) page: number,
+    @Query('type') type: 'grid' | 'list',
+    @Query('cursor') cursor?: string,
   ): Promise<UserProfilePostsResponseDto> {
-    return await this.postService.getUserPosts(userId, page);
+    return await this.postService.getUserPosts(userId, type, cursor);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -93,7 +113,11 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '회원 탈퇴 (Soft Delete)' })
   @ApiResponse({ status: 200, description: 'Account soft-deleted' })
-  async deleteAccount(@GetUser('public_id') userId: string) {
+  async deleteAccount(
+    @GetUser('public_id') userId: string,
+    @Param('social') social: string,
+    @Query('code') code: string,
+  ) {
     return await this.userService.deleteAccount(userId);
   }
 }

@@ -17,7 +17,8 @@ export class CreatePostDto {
 
   @ApiProperty()
   @IsNotEmpty()
-  brandId: number | string;
+  @IsString()
+  brand: string;
 
   @ApiProperty()
   @IsNotEmpty()

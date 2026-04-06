@@ -127,16 +127,51 @@ export class PostRepository extends BaseRepository {
   async findUserPosts(
     userId: string,
     limit: number,
-    offset: number,
-  ): Promise<{ photo: string; public_id: string }[]> {
+    cursor?: string,
+  ): Promise<
+    { photo: string; public_id: string; visibility: number; created_at: Date }[]
+  > {
     const query = `
-      SELECT photo, public_id
+      SELECT photo, public_id, visibility, created_at
       FROM post
       WHERE user_id = ? AND deleted_at IS NULL
+      ${cursor ? 'AND created_at < ?' : ''}
       ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ?
     `;
-    return await this.mysql.query(query, [userId, limit, offset]);
+    const params = cursor ? [userId, cursor, limit] : [userId, limit];
+    return await this.mysql.query(query, params);
+  }
+
+  async findUserPostsDetailed(
+    userId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<
+    {
+      public_id: string;
+      visibility: number;
+      caffeine: number;
+      description: string;
+      photo: string;
+      product_name: string;
+      brand_id: number;
+      created_at: Date;
+    }[]
+  > {
+    const query = `
+      SELECT 
+        p.public_id, p.visibility, p.description, p.photo, p.created_at,
+        i.caffeine, i.product_name, i.brand_id
+      FROM post p
+      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
+      WHERE p.user_id = ? AND p.deleted_at IS NULL
+      ${cursor ? 'AND p.created_at < ?' : ''}
+      ORDER BY p.created_at DESC
+      LIMIT ?
+    `;
+    const params = cursor ? [userId, cursor, limit] : [userId, limit];
+    return await this.mysql.query(query, params);
   }
 
   async countUserPosts(userId: string): Promise<number> {

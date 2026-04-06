@@ -5,10 +5,10 @@ export class PostResponseDto {
   postId: string;
 
   @ApiProperty()
-  userId: string;
+  userId?: string;
 
   @ApiProperty()
-  nickname: string;
+  nickname?: string;
 
   @ApiProperty({ required: false, nullable: true })
   profileUrl?: string | null;
@@ -23,10 +23,10 @@ export class PostResponseDto {
   createdAt: Date;
 
   @ApiProperty()
-  likeCount: number;
+  likeCount?: number;
 
   @ApiProperty()
-  commentCount: number;
+  commentCount?: number;
 
   @ApiProperty({ description: '0: Private, 1: Public, 2: Mutual' })
   visibility: number;
@@ -42,16 +42,16 @@ export class PostResponseDto {
   productName: string;
 
   @ApiProperty()
-  size: string;
+  size?: string;
 
   @ApiProperty()
-  shot: number;
+  shot?: number;
 
   @ApiProperty()
-  intensity: string;
+  intensity?: string;
 
   @ApiProperty()
-  userSum: number;
+  userSum?: number;
 
   @ApiProperty({ required: false })
   cursorId?: number;

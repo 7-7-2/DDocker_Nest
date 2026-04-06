@@ -33,9 +33,9 @@ export class PostService {
   ) {}
 
   async registerPost(userId: string, dto: CreatePostDto): Promise<void> {
-    const brandId = await this.brandService.resolveBrandId(dto.brandId);
+    const brandId = await this.brandService.resolveBrandId(dto.brand);
     if (!brandId) {
-      throw new BadRequestException(`Invalid brand: ${dto.brandId}`);
+      throw new BadRequestException(`Invalid brand: ${dto.brand}`);
     }
 
     const queryRunner = await this.postRepository.getQueryRunner();
@@ -46,7 +46,7 @@ export class PostService {
       const intakeId = await this.caffeineService.logIntake(
         userId,
         {
-          brandId: brandId, 
+          brandId: brandId,
           caffeine: dto.caffeine,
           productName: dto.productName,
           size: dto.size,
@@ -70,7 +70,11 @@ export class PostService {
 
       await this.postRepository.insertPostStats(dto.postId, queryRunner);
 
-      await this.postRepository.updateUserStatsPostCount(userId, 1, queryRunner);
+      await this.postRepository.updateUserStatsPostCount(
+        userId,
+        1,
+        queryRunner,
+      );
 
       await queryRunner.commitTransaction();
       this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
@@ -155,7 +159,12 @@ export class PostService {
     userId: string,
     cursor?: string | null,
   ): Promise<PaginatedPostResponseDto> {
-    const rows = await this.postRepository.findFollowingPosts(userId, cursor);
+    const sanitizedCursor =
+      cursor === 'null' || cursor === 'undefined' ? null : cursor;
+    const rows = await this.postRepository.findFollowingPosts(
+      userId,
+      sanitizedCursor,
+    );
 
     const posts = rows.map((row) => this.mapDetailRowToDto(row));
     const nextCursor =
@@ -199,25 +208,61 @@ export class PostService {
     return stats;
   }
 
+  async getUserPostCount(userId: string): Promise<number> {
+    return await this.postRepository.findUserPostCount(userId);
+  }
+
   async getUserPosts(
     userId: string,
-    page: number,
+    type: 'grid' | 'list',
+    cursor?: string,
   ): Promise<UserProfilePostsResponseDto> {
-    const limit = 18;
-    const offset = page * limit;
+    const limit = type === 'grid' ? 9 : 10;
+    const sanitizedCursor =
+      cursor === 'null' || cursor === 'undefined' ? undefined : cursor;
 
-    const [rows, count] = await Promise.all([
-      this.postRepository.findUserPosts(userId, limit, offset),
-      this.postRepository.findUserPostCount(userId),
-    ]);
+    if (type === 'grid') {
+      const rows = await this.postRepository.findUserPosts(
+        userId,
+        limit,
+        sanitizedCursor,
+      );
 
-    return {
-      allCount: count,
-      posts: rows.map((row) => ({
-        photo: row.photo,
-        postId: row.public_id,
-      })),
-    };
+      return {
+        posts: rows.map((row) => ({
+          photo: row.photo,
+          postId: row.public_id,
+          visibility: row.visibility,
+        })),
+        nextCursor:
+          rows.length === limit
+            ? rows[rows.length - 1].created_at.toISOString()
+            : null,
+      };
+    } else {
+      const rows = await this.postRepository.findUserPostsDetailed(
+        userId,
+        limit,
+        sanitizedCursor,
+      );
+
+      return {
+        listPosts: rows.map((row) => ({
+          postId: row.public_id,
+          visibility: row.visibility,
+          caffeine: row.caffeine,
+          description: row.description,
+          photo: row.photo,
+          productName: row.product_name,
+          brandId: row.brand_id,
+          createdAt: row.created_at,
+        })),
+        nextCursor:
+          rows.length === limit
+            ? rows[rows.length - 1].created_at.toISOString()
+            : null,
+      };
+    }
   }
 
   private mapDetailRowToDto(

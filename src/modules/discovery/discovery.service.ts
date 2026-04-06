@@ -11,11 +11,20 @@ export class DiscoveryService {
   constructor(private readonly discoveryRepository: DiscoveryRepository) {}
 
   async getBrandRanking(): Promise<BrandRankingDto[]> {
-    let ranking = await this.discoveryRepository.findBrandRanking(true);
-    if (ranking.length < 5) {
-      ranking = await this.discoveryRepository.findBrandRanking(false);
+    const weeklyRanking = await this.discoveryRepository.findBrandRanking(true);
+    if (weeklyRanking.length >= 5) {
+      return weeklyRanking;
     }
-    return ranking;
+
+    const allTimeRanking =
+      await this.discoveryRepository.findBrandRanking(false);
+    const weeklyBrandIds = new Set(weeklyRanking.map((r) => r.brandId));
+
+    const additionalRanking = allTimeRanking.filter(
+      (r) => !weeklyBrandIds.has(r.brandId),
+    );
+
+    return [...weeklyRanking, ...additionalRanking].slice(0, 5);
   }
 
   async getDailyPopular(): Promise<PopularPostDto[]> {

@@ -75,4 +75,33 @@ export class FollowController {
     const cursorId = cursor ? parseInt(cursor, 10) : null;
     return await this.followService.getFollowing(userId, cursorId);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get(':userId')
+  @ApiOperation({ summary: '팔로우 여부 확인' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns 1 if following, 0 otherwise',
+  })
+  async checkFollowing(
+    @GetUser('public_id') followerId: string,
+    @Param('userId') followedId: string,
+  ) {
+    const isFollowing = await this.followService.isFollowing(
+      followerId,
+      followedId,
+    );
+    return isFollowing ? 1 : 0;
+  }
+
+  @Get(':userId/username')
+  @ApiOperation({ summary: '유저 닉네임 조회' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the nickname of the user',
+  })
+  async getUsernameById(@Param('userId') userId: string) {
+    return await this.followService.getUsernameById(userId);
+  }
 }

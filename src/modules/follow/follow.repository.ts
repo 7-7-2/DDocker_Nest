@@ -142,4 +142,66 @@ export class FollowRepository extends BaseRepository {
     const params = cursor ? [userId, cursor] : [userId];
     return await this.mysql.query<FollowListRow>(query, params);
   }
+
+  async incrementFollowCounts(
+    followerId: string,
+    followedId: string,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const incrementFollowing = `
+      UPDATE user_stats 
+      SET following_count = following_count + 1 
+      WHERE user_id = ?
+    `;
+    const incrementFollower = `
+      UPDATE user_stats 
+      SET follower_count = follower_count + 1 
+      WHERE user_id = ?
+    `;
+
+    if (queryRunner) {
+      await queryRunner.query(incrementFollowing, [followerId]);
+      await queryRunner.query(incrementFollower, [followedId]);
+    } else {
+      await this.mysql.execute(incrementFollowing, [followerId]);
+      await this.mysql.execute(incrementFollower, [followedId]);
+    }
+  }
+
+  async decrementFollowCounts(
+    followerId: string,
+    followedId: string,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const decrementFollowing = `
+      UPDATE user_stats 
+      SET following_count = GREATEST(0, following_count - 1) 
+      WHERE user_id = ?
+    `;
+    const decrementFollower = `
+      UPDATE user_stats 
+      SET follower_count = GREATEST(0, follower_count - 1) 
+      WHERE user_id = ?
+    `;
+
+    if (queryRunner) {
+      await queryRunner.query(decrementFollowing, [followerId]);
+      await queryRunner.query(decrementFollower, [followedId]);
+    } else {
+      await this.mysql.execute(decrementFollowing, [followerId]);
+      await this.mysql.execute(decrementFollower, [followedId]);
+    }
+  }
+
+  async getUsernameById(userId: string): Promise<string | null> {
+    const query = `
+      SELECT nickname 
+      FROM user 
+      WHERE public_id = ? AND deleted_at IS NULL
+    `;
+    const results = await this.mysql.query<{ nickname: string }>(query, [
+      userId,
+    ]);
+    return results[0]?.nickname || null;
+  }
 }
