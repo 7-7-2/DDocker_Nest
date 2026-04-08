@@ -8,6 +8,7 @@ export interface FollowListRow {
   nickname: string;
   profile_url: string | null;
   caffeine_sum: number;
+  visibility: number;
   cursor_id: number;
 }
 
@@ -128,7 +129,7 @@ export class FollowRepository extends BaseRepository {
   ): Promise<FollowListRow[]> {
     const query = `
       SELECT 
-        u.public_id, u.nickname, u.profile_url, 
+        u.public_id, u.nickname, u.profile_url, u.visibility,
         COALESCE(us.sum, 0) as caffeine_sum,
         f.id as cursor_id
       FROM follows f
