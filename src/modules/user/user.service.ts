@@ -18,6 +18,8 @@ import { UserRepository, UserWithStatsRow } from './user.repository';
 import { BrandService } from '../brand/brand.service';
 import { AuthService } from '../../auth/auth.service';
 
+type PatchUser = Omit<UpdateUserDto, 'brand'> & { fav_brand_id: number };
+
 @Injectable()
 export class UserService {
   constructor(
@@ -28,9 +30,7 @@ export class UserService {
     private readonly authService: AuthService,
   ) {}
 
-  async setUserInit(
-    dto: CreateUserDto,
-  ): Promise<string> {
+  async setUserInit(dto: CreateUserDto): Promise<string> {
     const oauthUser = await this.redisService.get<OAuthUser>(
       `auth_handover:${dto.socialToken}`,
     );
@@ -101,7 +101,19 @@ export class UserService {
   }
 
   async patchUserProfile(userId: string, dto: UpdateUserDto): Promise<void> {
-    await this.userRepository.patchUserProfile(userId, dto);
+    const updateData: PatchUser = { fav_brand_id: 0, ...dto };
+
+    if (dto.brand) {
+      const favBrandId = await this.brandService.resolveBrandId(dto.brand);
+      if (!favBrandId) {
+        throw new BadRequestException(`Invalid brand name: ${dto.brand}`);
+      }
+      updateData.fav_brand_id = favBrandId;
+    }
+
+    if (Object.keys(updateData).length === 0) return;
+
+    await this.userRepository.patchUserProfile(userId, updateData);
   }
 
   async deleteAccount(userId: string): Promise<void> {
