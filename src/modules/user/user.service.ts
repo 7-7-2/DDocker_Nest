@@ -101,10 +101,14 @@ export class UserService {
   }
 
   async patchUserProfile(userId: string, dto: UpdateUserDto): Promise<void> {
-    const updateData: PatchUser = { fav_brand_id: 0, ...dto };
+    const { brand, ...rest } = dto;
+
+    const updateData: PatchUser = { fav_brand_id: 0, ...rest };
 
     if (dto.brand) {
-      const favBrandId = await this.brandService.resolveBrandId(dto.brand);
+      const favBrandId = await this.brandService.resolveBrandId(
+        brand as string,
+      );
       if (!favBrandId) {
         throw new BadRequestException(`Invalid brand name: ${dto.brand}`);
       }
