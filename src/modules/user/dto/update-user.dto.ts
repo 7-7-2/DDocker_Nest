@@ -14,10 +14,10 @@ export class UpdateUserDto {
   @MaxLength(150)
   bio?: string;
 
-  @ApiProperty({ example: 2, required: false })
+  @ApiProperty({ example: 'bbak', required: false })
   @IsOptional()
-  @IsNumber()
-  favBrandId?: number;
+  @IsString()
+  brand?: string;
 
   @ApiProperty({ example: 'https://r2.dev/new-profile.png', required: false })
   @IsOptional()
