@@ -13,6 +13,9 @@ export class FollowUserItemDto {
   @ApiProperty({ description: 'Total caffeine intake from stats table' })
   caffeineSum: number;
 
+  @ApiProperty({ description: '0: Mutual, 1: Public' })
+  visibility: number;
+
   cursorId: number;
 }
 

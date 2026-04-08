@@ -162,6 +162,7 @@ export class FollowService {
       nickname: row.nickname,
       profileUrl: row.profile_url || undefined,
       caffeineSum: row.caffeine_sum,
+      visibility: row.visibility,
       cursorId: row.cursor_id,
     }));
 
