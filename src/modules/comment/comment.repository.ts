@@ -127,7 +127,7 @@ export class CommentRepository extends BaseRepository {
   async findCommentsByPost(postId: string): Promise<CommentWithAuthorRow[]> {
     const query = `
       SELECT 
-        c.id, c.user_id, c.post_id, c.content, c.created_at, c.updated_at, c.deleted_at,
+        c.id, c.user_id, c.post_id, c.content, c.created_at, c.deleted_at,
         u.nickname, u.profile_url,
         (SELECT COUNT(*) FROM reply r WHERE r.comment_id = c.id AND r.deleted_at IS NULL) as reply_count
       FROM comment c
@@ -141,7 +141,7 @@ export class CommentRepository extends BaseRepository {
   async findRepliesByComment(commentId: number): Promise<ReplyWithAuthorRow[]> {
     const query = `
       SELECT 
-        r.id, r.user_id, r.comment_id, r.post_id, r.content, r.created_at, r.updated_at, r.deleted_at,
+        r.id, r.user_id, r.comment_id, r.post_id, r.content, r.created_at, r.deleted_at,
         u.nickname, u.profile_url
       FROM reply r
       INNER JOIN user u ON r.user_id = u.public_id

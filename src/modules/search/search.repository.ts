@@ -6,7 +6,7 @@ export interface UserSearchRow {
   userId: string;
   nickname: string;
   url: string;
-  caffeine: number;
+  caffeineSum: number;
 }
 
 @Injectable()
@@ -34,7 +34,7 @@ export class SearchRepository extends BaseRepository {
         u.public_id as userId, 
         u.nickname, 
         u.profile_url as url, 
-        s.sum as caffeine
+        s.sum as caffeineSum
       FROM user u
       LEFT JOIN user_stats s ON u.public_id = s.user_id
       WHERE u.nickname LIKE ?

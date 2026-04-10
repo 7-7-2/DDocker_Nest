@@ -36,6 +36,9 @@ export class PostResponseDto {
   brandId: number;
 
   @ApiProperty()
+  brand?: string;
+
+  @ApiProperty()
   caffeine: number;
 
   @ApiProperty()
