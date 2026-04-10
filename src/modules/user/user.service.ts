@@ -91,13 +91,16 @@ export class UserService {
   }
 
   async getUserInfo(userId: string): Promise<UserResponseDto> {
-    const userWithStats = await this.userRepository.findUserWithStats(userId);
+    const cacheKey = `user:profile:${userId}`;
+    return await this.redisService.getOrSet(cacheKey, 3600, async () => {
+      const userWithStats = await this.userRepository.findUserWithStats(userId);
 
-    if (!userWithStats) {
-      throw new NotFoundException('User not found');
-    }
+      if (!userWithStats) {
+        throw new NotFoundException('User not found');
+      }
 
-    return await this.mapToResponseDto(userWithStats);
+      return await this.mapToResponseDto(userWithStats);
+    });
   }
 
   async patchUserProfile(userId: string, dto: UpdateUserDto): Promise<void> {
@@ -118,10 +121,15 @@ export class UserService {
     if (Object.keys(updateData).length === 0) return;
 
     await this.userRepository.patchUserProfile(userId, updateData);
+    await this.redisService.del(`user:profile:${userId}`);
   }
 
   async deleteAccount(userId: string): Promise<void> {
     await this.userRepository.deleteAccount(userId);
+    await this.redisService.del([
+      `user:profile:${userId}`,
+      `user:stats:${userId}`,
+    ]);
   }
 
   async checkUserNickname(nickname: string): Promise<boolean> {
@@ -148,8 +156,11 @@ export class UserService {
   async getUserFollowCounts(
     userId: string,
   ): Promise<{ follower: number; following: number }> {
-    const counts = await this.userRepository.findUserFollowCounts(userId);
-    return counts || { follower: 0, following: 0 };
+    const cacheKey = `user:stats:${userId}`;
+    return await this.redisService.getOrSet(cacheKey, 3600, async () => {
+      const counts = await this.userRepository.findUserFollowCounts(userId);
+      return counts || { follower: 0, following: 0 };
+    });
   }
 
   private async mapToResponseDto(

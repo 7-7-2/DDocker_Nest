@@ -11,11 +11,16 @@ import {
 } from './dto/follow-list.dto';
 import { NotificationService } from '../notification/notification.service';
 
+import { RedisService } from '../../providers/redis/redis.service';
+
 @Injectable()
 export class FollowService {
+  private readonly FOLLOW_SET_PREFIX = 'follow:set:';
+
   constructor(
     private readonly followRepository: FollowRepository,
     private readonly notificationService: NotificationService,
+    private readonly redisService: RedisService,
   ) {}
 
   async follow(
@@ -27,7 +32,7 @@ export class FollowService {
       throw new BadRequestException('You cannot follow yourself');
     }
 
-    const alreadyFollowing = await this.followRepository.isFollowing(
+    const alreadyFollowing = await this.isFollowing(
       followerId,
       followedId,
     );
@@ -35,7 +40,7 @@ export class FollowService {
       throw new ConflictException('Already following this user');
     }
 
-    const isNowMutual = await this.followRepository.isFollowing(
+    const isNowMutual = await this.isFollowing(
       followedId,
       followerId,
     );
@@ -68,6 +73,10 @@ export class FollowService {
       );
 
       await queryRunner.commitTransaction();
+
+      await this.redisService.sadd(`${this.FOLLOW_SET_PREFIX}${followerId}`, followedId);
+      await this.invalidateFollowCaches(followerId, followedId);
+
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -84,7 +93,7 @@ export class FollowService {
   }
 
   async unfollow(followerId: string, followedId: string): Promise<void> {
-    const isFollowing = await this.followRepository.isFollowing(
+    const isFollowing = await this.isFollowing(
       followerId,
       followedId,
     );
@@ -120,6 +129,10 @@ export class FollowService {
       );
 
       await queryRunner.commitTransaction();
+
+      await this.redisService.srem(`${this.FOLLOW_SET_PREFIX}${followerId}`, followedId);
+      await this.invalidateFollowCaches(followerId, followedId);
+
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -128,10 +141,37 @@ export class FollowService {
     }
   }
 
+  private async invalidateFollowCaches(followerId: string, followedId: string) {
+    const keys = [
+      `user:profile:${followerId}`,
+      `user:profile:${followedId}`,
+      `user:stats:${followerId}`,
+      `user:stats:${followedId}`,
+      `follow:list:following:${followerId}:page1`,
+      `follow:list:followers:${followedId}:page1`,
+    ];
+    await this.redisService.del(keys);
+  }
+
   async getFollowers(
     userId: string,
     cursor: number | null,
   ): Promise<PaginatedFollowResponseDto> {
+    const isPage1 = cursor === null;
+    const cacheKey = `follow:list:followers:${userId}:page1`;
+
+    if (isPage1) {
+      return await this.redisService.getOrSet(cacheKey, 300, async () => {
+        const rows = await this.followRepository.findFollowList(
+          'followed_user_id',
+          'following_user_id',
+          userId,
+          cursor,
+        );
+        return this.mapToPaginatedResponse(rows);
+      });
+    }
+
     const rows = await this.followRepository.findFollowList(
       'followed_user_id',
       'following_user_id',
@@ -145,6 +185,21 @@ export class FollowService {
     userId: string,
     cursor: number | null,
   ): Promise<PaginatedFollowResponseDto> {
+    const isPage1 = cursor === null;
+    const cacheKey = `follow:list:following:${userId}:page1`;
+
+    if (isPage1) {
+      return await this.redisService.getOrSet(cacheKey, 300, async () => {
+        const rows = await this.followRepository.findFollowList(
+          'following_user_id',
+          'followed_user_id',
+          userId,
+          cursor,
+        );
+        return this.mapToPaginatedResponse(rows);
+      });
+    }
+
     const rows = await this.followRepository.findFollowList(
       'following_user_id',
       'followed_user_id',
@@ -176,7 +231,16 @@ export class FollowService {
   }
 
   async isFollowing(followerId: string, followedId: string): Promise<boolean> {
-    return await this.followRepository.isFollowing(followerId, followedId);
+    const cacheKey = `${this.FOLLOW_SET_PREFIX}${followerId}`;
+    
+    const inCache = await this.redisService.sismember(cacheKey, followedId);
+    if (inCache) return true;
+
+    const inDb = await this.followRepository.isFollowing(followerId, followedId);
+    if (inDb) {
+      await this.redisService.sadd(cacheKey, followedId);
+    }
+    return inDb;
   }
 
   async areMutual(userIdA: string, userIdB: string): Promise<boolean> {

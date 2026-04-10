@@ -23,6 +23,8 @@ import {
   CreateReplyDto,
   CommentResponseDto,
   ReplyResponseDto,
+  DeleteCommentDto,
+  DeleteReplyDto,
 } from './dto/comment.dto';
 
 @ApiTags('Comments')
@@ -81,25 +83,25 @@ export class CommentController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Delete(':id')
+  @Delete()
   @ApiOperation({ summary: '댓글 삭제(Soft-delete)' })
   async deleteComment(
     @GetUser('public_id') userId: string,
-    @Param('id') id: string,
+    @Body() dto: DeleteCommentDto,
   ) {
-    await this.commentService.deleteComment(userId, parseInt(id, 10));
+    await this.commentService.deleteComment(userId, dto);
     return { success: true };
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Delete('reply/:id')
+  @Delete('reply')
   @ApiOperation({ summary: '답글 삭제(Soft-delete)' })
   async deleteReply(
     @GetUser('public_id') userId: string,
-    @Param('id') id: string,
+    @Body() dto: DeleteReplyDto,
   ) {
-    await this.commentService.deleteReply(userId, parseInt(id, 10));
+    await this.commentService.deleteReply(userId, dto);
     return { success: true };
   }
 }

@@ -83,3 +83,27 @@ export class ReplyResponseDto {
   @ApiProperty()
   isDeleted: boolean;
 }
+
+export class DeleteCommentDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsNumber()
+  commentId: number;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  postId: string;
+}
+
+export class DeleteReplyDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsNumber()
+  replyId: number;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  postId: string;
+}

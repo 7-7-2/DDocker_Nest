@@ -11,7 +11,7 @@ import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class LikeService {
-  private readonly REDIS_PREFIX = 'post_likes:';
+  private readonly REDIS_PREFIX = 'post:likes:';
 
   constructor(
     private readonly likeRepository: LikeRepository,
@@ -46,6 +46,7 @@ export class LikeService {
       await queryRunner.commitTransaction();
 
       await this.redisService.sadd(`${this.REDIS_PREFIX}${postId}`, userId);
+      await this.redisService.del(`post:stats:${postId}`);
 
       // Send notification if not self
       if (userId !== post.user_id) {
@@ -83,6 +84,7 @@ export class LikeService {
       await queryRunner.commitTransaction();
 
       await this.redisService.srem(`${this.REDIS_PREFIX}${postId}`, userId);
+      await this.redisService.del(`post:stats:${postId}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('Failed to unlike post');
