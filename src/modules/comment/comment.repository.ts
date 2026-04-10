@@ -70,17 +70,34 @@ export class CommentRepository extends BaseRepository {
     }
   }
 
+  async decrementCommentCount(
+    postId: string,
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const query = `
+      UPDATE post_stats 
+      SET comment_count = GREATEST(0, comment_count - 1) 
+      WHERE post_id = ?
+    `;
+    if (queryRunner) {
+      await queryRunner.query(query, [postId]);
+    } else {
+      await this.mysql.execute(query, [postId]);
+    }
+  }
+
   async softDeleteComment(
     userId: string,
     commentId: number,
+    postId: string,
     queryRunner?: QueryRunner,
   ): Promise<void> {
     const query = `
       UPDATE comment 
       SET deleted_at = CURRENT_TIMESTAMP 
-      WHERE id = ? AND user_id = ?
+      WHERE id = ? AND user_id = ? AND post_id = ?
     `;
-    const params = [commentId, userId];
+    const params = [commentId, userId, postId];
     if (queryRunner) {
       await queryRunner.query(query, params);
     } else {
@@ -91,18 +108,19 @@ export class CommentRepository extends BaseRepository {
   async softDeleteReply(
     userId: string,
     replyId: number,
+    postId: string,
     queryRunner?: QueryRunner,
   ): Promise<void> {
     const query = `
       UPDATE reply 
       SET deleted_at = CURRENT_TIMESTAMP 
-      WHERE id = ? AND user_id = ?
+      WHERE id = ? AND user_id = ? AND post_id = ?
     `;
-    const params = [replyId, userId];
+    const params = [replyId, userId, postId];
     if (queryRunner) {
       await queryRunner.query(query, params);
     } else {
-      await this.mysql.execute(query, [replyId, userId]);
+      await this.mysql.execute(query, params);
     }
   }
 

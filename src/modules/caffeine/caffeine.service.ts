@@ -20,6 +20,8 @@ import {
   WeeklyTrendDto,
 } from './dto/caffeine-stats.dto';
 
+import { RedisService } from '../../providers/redis/redis.service';
+
 @Injectable()
 export class CaffeineService {
   private readonly logger = new Logger(CaffeineService.name);
@@ -27,6 +29,7 @@ export class CaffeineService {
   constructor(
     private readonly caffeineRepository: CaffeineRepository,
     private readonly brandService: BrandService,
+    private readonly redisService: RedisService,
   ) {}
 
   async logIntake(
@@ -71,6 +74,8 @@ export class CaffeineService {
         await queryRunner.commitTransaction();
       }
 
+      await this.invalidateCaffeineCaches(userId);
+
       this.logger.log(`Intake ${intakeId} logged for user ${userId}`);
       return intakeId;
     } catch (error) {
@@ -88,40 +93,54 @@ export class CaffeineService {
     }
   }
 
-  async getTodayConsumption(userId: string): Promise<TodayCaffeineResponseDto> {
+  private async invalidateCaffeineCaches(userId: string) {
     const now = new Date();
-    const start = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      0,
-      0,
-      0,
-    );
-    const end = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      23,
-      59,
-      59,
-    );
+    const monthKey = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    const keys = [
+      `caffeine:today:${userId}`,
+      `caffeine:monthly:${userId}:${monthKey}`,
+      `user:profile:${userId}`,
+    ];
+    await this.redisService.del(keys);
+  }
 
-    const row = await this.caffeineRepository.findTodayConsumption(
-      userId,
-      this.formatDateForDb(start),
-      this.formatDateForDb(end),
-    );
+  async getTodayConsumption(userId: string): Promise<TodayCaffeineResponseDto> {
+    const cacheKey = `caffeine:today:${userId}`;
+    return await this.redisService.getOrSet(cacheKey, 10800, async () => {
+      const now = new Date();
+      const start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        0,
+        0,
+      );
+      const end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
 
-    if (!row) {
-      return { todayCaffeine: 0, todayCups: 0, items: [] };
-    }
+      const row = await this.caffeineRepository.findTodayConsumption(
+        userId,
+        this.formatDateForDb(start),
+        this.formatDateForDb(end),
+      );
 
-    return {
-      todayCaffeine: row.caffeine_sum ? Number(row.caffeine_sum) : 0,
-      todayCups: row.cup_count,
-      items: this.parseItems(row.items),
-    };
+      if (!row) {
+        return { todayCaffeine: 0, todayCups: 0, items: [] };
+      }
+
+      return {
+        todayCaffeine: row.caffeine_sum ? Number(row.caffeine_sum) : 0,
+        todayCups: row.cup_count,
+        items: this.parseItems(row.items),
+      };
+    });
   }
 
   private parseItems(items: unknown): TodayCaffeineItemDto[] {
@@ -144,77 +163,86 @@ export class CaffeineService {
   }
 
   async getWeeklyTrend(userId: string): Promise<WeeklyStatsResponseDto> {
-    const now = new Date();
-    const day = now.getDay();
-    const diffToMonday = day === 0 ? 6 : day - 1;
+    const cacheKey = `caffeine:weekly:${userId}`;
+    return await this.redisService.getOrSet(cacheKey, 10800, async () => {
+      const now = new Date();
+      const day = now.getDay();
+      const diffToMonday = day === 0 ? 6 : day - 1;
 
-    const currentMonday = new Date(now);
-    currentMonday.setDate(now.getDate() - diffToMonday);
-    currentMonday.setHours(0, 0, 0, 0);
+      const currentMonday = new Date(now);
+      currentMonday.setDate(now.getDate() - diffToMonday);
+      currentMonday.setHours(0, 0, 0, 0);
 
-    const sixWeeksAgoMonday = new Date(currentMonday);
-    sixWeeksAgoMonday.setDate(currentMonday.getDate() - 35);
+      const sixWeeksAgoMonday = new Date(currentMonday);
+      sixWeeksAgoMonday.setDate(currentMonday.getDate() - 35);
 
-    const rows = await this.caffeineRepository.findWeeklyCupStats(
-      userId,
-      this.formatDateForDb(sixWeeksAgoMonday),
-    );
+      const rows = await this.caffeineRepository.findWeeklyCupStats(
+        userId,
+        this.formatDateForDb(sixWeeksAgoMonday),
+      );
 
-    const trend: WeeklyTrendDto[] = rows.map((row) => {
-      const start = new Date(row.week_start);
-      const end = new Date(row.week_end);
-      const label = `${this.formatDateShort(start)}~${this.formatDateShort(end)}`;
+      const trend: WeeklyTrendDto[] = rows.map((row) => {
+        const start = new Date(row.week_start);
+        const end = new Date(row.week_end);
+        const label = `${this.formatDateShort(start)}~${this.formatDateShort(end)}`;
 
-      return {
-        range: label,
-        cups: row.cups,
-      };
+        return {
+          range: label,
+          cups: row.cups,
+        };
+      });
+
+      return { trend };
     });
-
-    return { trend };
   }
 
   async getMonthlyView(
     userId: string,
     dateStr: string,
   ): Promise<CaffeineMonthlyViewDto> {
-    const { start, end } = this.getMonthRange(dateStr);
-    const rows = await this.caffeineRepository.findMonthlyDetails(
-      userId,
-      start,
-      end,
-    );
+    const date = new Date(dateStr);
+    const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+    const cacheKey = `caffeine:monthly:${userId}:${monthKey}`;
 
-    const details: Record<string, CaffeineDetailItemDto[]> = {};
-    const sumsMap: Record<number, number> = {};
+    return await this.redisService.getOrSet(cacheKey, 86400, async () => {
+      const { start, end } = this.getMonthRange(dateStr);
+      const rows = await this.caffeineRepository.findMonthlyDetails(
+        userId,
+        start,
+        end,
+      );
 
-    rows.forEach((row) => {
-      const day = row.day;
-      const dayKey = day.toString();
+      const details: Record<string, CaffeineDetailItemDto[]> = {};
+      const sumsMap: Record<number, number> = {};
 
-      if (!details[dayKey]) details[dayKey] = [];
-      details[dayKey].push({
-        intakeId: row.id,
-        brand: row.brand_name,
-        caffeine: row.caffeine,
-        menu: row.product_name,
-        intensity: row.intensity,
-        shot: row.shot,
-        size: row.size,
+      rows.forEach((row) => {
+        const day = row.day;
+        const dayKey = day.toString();
+
+        if (!details[dayKey]) details[dayKey] = [];
+        details[dayKey].push({
+          intakeId: row.id,
+          brand: row.brand_name,
+          caffeine: row.caffeine,
+          menu: row.product_name,
+          intensity: row.intensity,
+          shot: row.shot,
+          size: row.size,
+        });
+
+        sumsMap[day] = (sumsMap[day] || 0) + row.caffeine;
       });
 
-      sumsMap[day] = (sumsMap[day] || 0) + row.caffeine;
+      const summary: CaffeineSummaryItemDto[] = Object.keys(sumsMap)
+        .map((day) => parseInt(day, 10))
+        .sort((a, b) => a - b)
+        .map((day) => ({
+          day,
+          caffeineSum: sumsMap[day],
+        }));
+
+      return { summary, details };
     });
-
-    const summary: CaffeineSummaryItemDto[] = Object.keys(sumsMap)
-      .map((day) => parseInt(day, 10))
-      .sort((a, b) => a - b)
-      .map((day) => ({
-        day,
-        caffeineSum: sumsMap[day],
-      }));
-
-    return { summary, details };
   }
 
   private getMonthRange(dateStr: string): { start: string; end: string } {

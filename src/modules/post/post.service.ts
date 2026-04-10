@@ -77,6 +77,9 @@ export class PostService {
       );
 
       await queryRunner.commitTransaction();
+
+      await this.redisService.del(`user:stats:${userId}`);
+
       this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -122,6 +125,13 @@ export class PostService {
       );
 
       await queryRunner.commitTransaction();
+
+      await this.redisService.del([
+        `user:stats:${userId}`,
+        `post:detail:${postId}`,
+        `post:stats:${postId}`,
+      ]);
+
       this.logger.log(`Post ${postId} deleted for user ${userId}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -148,11 +158,14 @@ export class PostService {
   }
 
   async getPostDetail(postId: string): Promise<PostResponseDto> {
-    const stats = await this.getStatsWithFallback(postId);
-    const row = await this.postRepository.findPostDetail(postId);
-    if (!row) throw new NotFoundException('Post not found');
+    const cacheKey = `post:detail:${postId}`;
+    return await this.redisService.getOrSet(cacheKey, 300, async () => {
+      const stats = await this.getStatsWithFallback(postId);
+      const row = await this.postRepository.findPostDetail(postId);
+      if (!row) throw new NotFoundException('Post not found');
 
-    return this.mapDetailRowToDto(row, { ...stats });
+      return this.mapDetailRowToDto(row, { ...stats });
+    });
   }
 
   async getFollowingPosts(
@@ -161,6 +174,30 @@ export class PostService {
   ): Promise<PaginatedPostResponseDto> {
     const sanitizedCursor =
       cursor === 'null' || cursor === 'undefined' ? null : cursor;
+
+    const isPage1 = sanitizedCursor === null;
+    const cacheKey = `post:feed:following:${userId}`;
+
+    if (isPage1) {
+      return await this.redisService.getOrSet(cacheKey, 120, async () => {
+        const rows = await this.postRepository.findFollowingPosts(
+          userId,
+          sanitizedCursor,
+        );
+
+        const posts = rows.map((row) => this.mapDetailRowToDto(row));
+        const nextCursor =
+          rows.length === 10
+            ? rows[rows.length - 1].created_at.toISOString()
+            : null;
+
+        return {
+          posts,
+          nextCursor,
+        };
+      });
+    }
+
     const rows = await this.postRepository.findFollowingPosts(
       userId,
       sanitizedCursor,
@@ -182,30 +219,20 @@ export class PostService {
     postId: string,
   ): Promise<SocialCountsResponseDto | null> {
     const cacheKey = `post_stats:${postId}`;
-    const cached = await this.redisService.get<{
-      likeCount: number;
-      commentCount: number;
-    }>(cacheKey);
-
-    return cached;
+    return await this.redisService.get<SocialCountsResponseDto>(cacheKey);
   }
 
   async getStatsWithFallback(
     postId: string,
   ): Promise<{ likeCount: number; commentCount: number }> {
     const cacheKey = `post_stats:${postId}`;
-    const cached = await this.getPostSocialCounts(postId);
-    if (cached) return cached;
-
-    const dbStats = await this.postRepository.findPostStats(postId);
-    const stats = {
-      likeCount: dbStats?.like_count || 0,
-      commentCount: dbStats?.comment_count || 0,
-    };
-
-    await this.redisService.set(cacheKey, stats, 300);
-
-    return stats;
+    return await this.redisService.getOrSet(cacheKey, 300, async () => {
+      const dbStats = await this.postRepository.findPostStats(postId);
+      return {
+        likeCount: dbStats?.like_count || 0,
+        commentCount: dbStats?.comment_count || 0,
+      };
+    });
   }
 
   async getUserPostCount(userId: string): Promise<number> {
@@ -221,11 +248,29 @@ export class PostService {
     const sanitizedCursor =
       cursor === 'null' || cursor === 'undefined' ? undefined : cursor;
 
+    const isPage1 = sanitizedCursor === undefined;
+    const cacheKey = `user:posts:${userId}:${type}:page1`;
+
+    if (isPage1) {
+      return await this.redisService.getOrSet(cacheKey, 300, async () => {
+        return await this.fetchUserPosts(userId, type, limit, sanitizedCursor);
+      });
+    }
+
+    return await this.fetchUserPosts(userId, type, limit, sanitizedCursor);
+  }
+
+  private async fetchUserPosts(
+    userId: string,
+    type: 'grid' | 'list',
+    limit: number,
+    cursor?: string,
+  ): Promise<UserProfilePostsResponseDto> {
     if (type === 'grid') {
       const rows = await this.postRepository.findUserPosts(
         userId,
         limit,
-        sanitizedCursor,
+        cursor,
       );
 
       return {
@@ -243,7 +288,7 @@ export class PostService {
       const rows = await this.postRepository.findUserPostsDetailed(
         userId,
         limit,
-        sanitizedCursor,
+        cursor,
       );
 
       return {

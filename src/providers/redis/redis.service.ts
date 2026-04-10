@@ -61,6 +61,39 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.redisClient.del(key);
   }
 
+  async delByPattern(pattern: string): Promise<void> {
+    const stream = this.redisClient.scanStream({
+      match: pattern,
+      count: 100,
+    });
+
+    stream.on('data', (keys: string[]) => {
+      if (keys.length > 0) {
+        this.redisClient.del(...keys);
+      }
+    });
+
+    return new Promise((resolve, reject) => {
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+  }
+
+  async getOrSet<T>(
+    key: string,
+    ttl: number,
+    factory: () => Promise<T>,
+  ): Promise<T> {
+    const cachedData = await this.get<T>(key);
+    if (cachedData !== null) {
+      return cachedData;
+    }
+
+    const freshData = await factory();
+    await this.set(key, freshData, ttl);
+    return freshData;
+  }
+
   async sadd(key: string, ...members: (string | number)[]): Promise<number> {
     return await this.redisClient.sadd(key, ...members);
   }

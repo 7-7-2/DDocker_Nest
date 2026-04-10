@@ -9,6 +9,8 @@ import {
   CreateReplyDto,
   CommentResponseDto,
   ReplyResponseDto,
+  DeleteCommentDto,
+  DeleteReplyDto,
 } from './dto/comment.dto';
 import {
   CommentWithAuthorRow,
@@ -16,6 +18,7 @@ import {
 } from './entities/comment.entity';
 import { PostRepository } from '../post/post.repository';
 import { NotificationService } from '../notification/notification.service';
+import { RedisService } from '../../providers/redis/redis.service';
 
 @Injectable()
 export class CommentService {
@@ -23,6 +26,7 @@ export class CommentService {
     private readonly commentRepository: CommentRepository,
     private readonly postRepository: PostRepository,
     private readonly notificationService: NotificationService,
+    private readonly redisService: RedisService,
   ) {}
 
   async createComment(
@@ -55,6 +59,9 @@ export class CommentService {
       );
 
       await queryRunner.commitTransaction();
+
+      await this.redisService.del(`post:comments:${dto.postId}`);
+      await this.redisService.del(`post:stats:${dto.postId}`);
 
       if (userId !== post.user_id) {
         await this.notificationService.pushNotification(post.user_id, {
@@ -96,6 +103,10 @@ export class CommentService {
       );
 
       await queryRunner.commitTransaction();
+
+      await this.redisService.del(`post:comments:${dto.postId}`);
+      await this.redisService.del(`comment:replies:${dto.commentId}`);
+      await this.redisService.del(`post:stats:${dto.postId}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('Failed to add reply');
@@ -104,22 +115,87 @@ export class CommentService {
     }
   }
 
-  async deleteComment(userId: string, commentId: number): Promise<void> {
-    await this.commentRepository.softDeleteComment(userId, commentId);
+  async deleteComment(userId: string, dto: DeleteCommentDto): Promise<void> {
+    const queryRunner = await this.commentRepository.getQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.commentRepository.softDeleteComment(
+        userId,
+        dto.commentId,
+        dto.postId,
+        queryRunner,
+      );
+
+      await this.commentRepository.decrementCommentCount(
+        dto.postId,
+        queryRunner,
+      );
+
+      await queryRunner.commitTransaction();
+
+      await this.redisService.del(`post:comments:${dto.postId}`);
+      await this.redisService.del(`post:stats:${dto.postId}`);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new InternalServerErrorException('Failed to delete comment');
+    } finally {
+      await queryRunner.release();
+    }
   }
 
-  async deleteReply(userId: string, replyId: number): Promise<void> {
-    await this.commentRepository.softDeleteReply(userId, replyId);
+  async deleteReply(userId: string, dto: DeleteReplyDto): Promise<void> {
+    const queryRunner = await this.commentRepository.getQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.commentRepository.softDeleteReply(
+        userId,
+        dto.replyId,
+        dto.postId,
+        queryRunner,
+      );
+
+      await this.commentRepository.decrementCommentCount(
+        dto.postId,
+        queryRunner,
+      );
+
+      await queryRunner.commitTransaction();
+
+      await this.redisService.del(`post:comments:${dto.postId}`);
+      await this.redisService.del(`post:stats:${dto.postId}`);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new InternalServerErrorException('Failed to delete reply');
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async getCommentsByPost(postId: string): Promise<CommentResponseDto[]> {
-    const rows = await this.commentRepository.findCommentsByPost(postId);
-    return rows.map((row) => this.mapCommentRowToDto(row));
+    return await this.redisService.getOrSet(
+      `post:comments:${postId}`,
+      300,
+      async () => {
+        const rows = await this.commentRepository.findCommentsByPost(postId);
+        return rows.map((row) => this.mapCommentRowToDto(row));
+      },
+    );
   }
 
   async getRepliesByComment(commentId: number): Promise<ReplyResponseDto[]> {
-    const rows = await this.commentRepository.findRepliesByComment(commentId);
-    return rows.map((row) => this.mapReplyRowToDto(row));
+    return await this.redisService.getOrSet(
+      `comment:replies:${commentId}`,
+      300,
+      async () => {
+        const rows =
+          await this.commentRepository.findRepliesByComment(commentId);
+        return rows.map((row) => this.mapReplyRowToDto(row));
+      },
+    );
   }
 
   private mapCommentRowToDto(row: CommentWithAuthorRow): CommentResponseDto {
