@@ -164,7 +164,7 @@ export class PostService {
       const row = await this.postRepository.findPostDetail(postId);
       if (!row) throw new NotFoundException('Post not found');
 
-      return this.mapDetailRowToDto(row, { ...stats });
+      return await this.mapDetailRowToDto(row, { ...stats });
     });
   }
 
@@ -185,7 +185,9 @@ export class PostService {
           sanitizedCursor,
         );
 
-        const posts = rows.map((row) => this.mapDetailRowToDto(row));
+        const posts = await Promise.all(
+          rows.map((row) => this.mapDetailRowToDto(row)),
+        );
         const nextCursor =
           rows.length === 10
             ? rows[rows.length - 1].created_at.toISOString()
@@ -203,7 +205,9 @@ export class PostService {
       sanitizedCursor,
     );
 
-    const posts = rows.map((row) => this.mapDetailRowToDto(row));
+    const posts = await Promise.all(
+      rows.map((row) => this.mapDetailRowToDto(row)),
+    );
     const nextCursor =
       rows.length === 10
         ? rows[rows.length - 1].created_at.toISOString()
@@ -292,16 +296,19 @@ export class PostService {
       );
 
       return {
-        listPosts: rows.map((row) => ({
-          postId: row.public_id,
-          visibility: row.visibility,
-          caffeine: row.caffeine,
-          description: row.description,
-          photo: row.photo,
-          productName: row.product_name,
-          brandId: row.brand_id,
-          createdAt: row.created_at,
-        })),
+        listPosts: await Promise.all(
+          rows.map(async (row) => ({
+            postId: row.public_id,
+            visibility: row.visibility,
+            caffeine: row.caffeine,
+            description: row.description,
+            photo: row.photo,
+            productName: row.product_name,
+            brandId: row.brand_id,
+            brand: (await this.brandService.resolveBrandName(row.brand_id)) || undefined,
+            createdAt: row.created_at,
+          })),
+        ),
         nextCursor:
           rows.length === limit
             ? rows[rows.length - 1].created_at.toISOString()
@@ -310,14 +317,16 @@ export class PostService {
     }
   }
 
-  private mapDetailRowToDto(
+  private async mapDetailRowToDto(
     row: PostDetailRow | PostFeedRow,
     stats?: { likeCount: number; commentCount: number },
-  ): PostResponseDto {
+  ): Promise<PostResponseDto> {
     const likeCount = stats ? stats.likeCount : (row as PostFeedRow).like_count;
     const commentCount = stats
       ? stats.commentCount
       : (row as PostFeedRow).comment_count;
+
+    const brandName = await this.brandService.resolveBrandName(row.brand_id);
 
     return {
       postId: row.public_id,
@@ -331,6 +340,7 @@ export class PostService {
       commentCount: commentCount || 0,
       visibility: row.visibility,
       brandId: row.brand_id,
+      brand: brandName || undefined,
       caffeine: row.caffeine,
       productName: row.product_name,
       size: row.size,

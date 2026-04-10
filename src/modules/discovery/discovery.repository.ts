@@ -93,8 +93,12 @@ export class DiscoveryRepository extends BaseRepository {
         b.brand_name as brandName,
         i.caffeine,
         i.shot,
+        i.intensity,
+        i.size,
         ps.like_count as likeCount,
         u.nickname,
+        us.sum as userSum, 
+        u.public_id,
         u.profile_url as profileUrl,
         p.created_at as createdAt
       FROM post p
@@ -102,6 +106,7 @@ export class DiscoveryRepository extends BaseRepository {
       INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
       INNER JOIN brand b ON i.brand_id = b.id
       INNER JOIN post_stats ps ON p.public_id = ps.post_id
+      INNER JOIN user_stats us ON p.user_id = us.user_id 
       WHERE p.deleted_at IS NULL
         AND u.deleted_at IS NULL
         AND p.visibility = 1
@@ -123,15 +128,20 @@ export class DiscoveryRepository extends BaseRepository {
         b.brand_name as brandName,
         i.caffeine,
         i.shot,
+        i.intensity,
+        i.size,
         ps.like_count as likeCount,
         u.nickname,
+        u.public_id,
         u.profile_url as profileUrl,
+        us.sum as userSum, 
         p.created_at as createdAt
       FROM post p
       INNER JOIN user u ON p.user_id = u.public_id
       INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
       INNER JOIN brand b ON i.brand_id = b.id
       INNER JOIN post_stats ps ON p.public_id = ps.post_id
+      INNER JOIN user_stats us ON p.user_id = us.user_id 
       WHERE p.deleted_at IS NULL
         AND u.deleted_at IS NULL
         AND p.visibility = 1

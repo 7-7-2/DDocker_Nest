@@ -11,7 +11,7 @@ export class BrandRankingDto {
   intakeCount: number;
 }
 
-export class PopularPostDto {
+export class FeedPostDto {
   @ApiProperty({ example: 'post_public_id' })
   postId: string;
 

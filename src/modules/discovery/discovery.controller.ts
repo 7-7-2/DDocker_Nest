@@ -4,7 +4,7 @@ import { DiscoveryService } from './discovery.service';
 import { BrandService } from '../brand/brand.service';
 import {
   BrandRankingDto,
-  PopularPostDto,
+  FeedPostDto,
   BrandPopularMenuDto,
 } from './dto/discovery-response.dto';
 
@@ -25,17 +25,17 @@ export class DiscoveryController {
 
   @Get('popular')
   @ApiOperation({ summary: '오늘의 인기 게시글 조회(피드 상단)' })
-  @ApiResponse({ status: 200, type: [PopularPostDto] })
-  async getDailyPopular(): Promise<PopularPostDto[]> {
+  @ApiResponse({ status: 200, type: [FeedPostDto] })
+  async getDailyPopular(): Promise<FeedPostDto[]> {
     return await this.discoveryService.getDailyPopular();
   }
 
   @Get('brands/:brandId/recent')
   @ApiOperation({ summary: '특정 브랜드의 최근 게시글 조회' })
-  @ApiResponse({ status: 200, type: [PopularPostDto] })
+  @ApiResponse({ status: 200, type: [FeedPostDto] })
   async getBrandRecentPosts(
     @Param('brandId') brandIdentifier: string,
-  ): Promise<PopularPostDto[]> {
+  ): Promise<FeedPostDto[]> {
     const brandId = await this.brandService.resolveBrandId(brandIdentifier);
     if (!brandId) throw new BadRequestException('Invalid brand identifier');
     return await this.discoveryService.getBrandRecentPosts(brandId);
@@ -43,10 +43,10 @@ export class DiscoveryController {
 
   @Get('brands/:brandId/popular')
   @ApiOperation({ summary: '특정 브랜드의 인기 게시글 조회' })
-  @ApiResponse({ status: 200, type: [PopularPostDto] })
+  @ApiResponse({ status: 200, type: [FeedPostDto] })
   async getBrandPopularPosts(
     @Param('brandId') brandIdentifier: string,
-  ): Promise<PopularPostDto[]> {
+  ): Promise<FeedPostDto[]> {
     const brandId = await this.brandService.resolveBrandId(brandIdentifier);
     if (!brandId) throw new BadRequestException('Invalid brand identifier');
     return await this.discoveryService.getBrandPopularPosts(brandId);

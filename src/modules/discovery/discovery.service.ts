@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DiscoveryRepository } from './discovery.repository';
 import {
   BrandRankingDto,
-  PopularPostDto,
+  FeedPostDto,
   BrandPopularMenuDto,
 } from './dto/discovery-response.dto';
 
@@ -18,7 +18,8 @@ export class DiscoveryService {
   async getBrandRanking(): Promise<BrandRankingDto[]> {
     const cacheKey = 'discovery:ranking';
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
-      const weeklyRanking = await this.discoveryRepository.findBrandRanking(true);
+      const weeklyRanking =
+        await this.discoveryRepository.findBrandRanking(true);
       if (weeklyRanking.length >= 5) {
         return weeklyRanking;
       }
@@ -35,21 +36,21 @@ export class DiscoveryService {
     });
   }
 
-  async getDailyPopular(): Promise<PopularPostDto[]> {
+  async getDailyPopular(): Promise<FeedPostDto[]> {
     const cacheKey = 'discovery:popular:daily';
     return await this.redisService.getOrSet(cacheKey, 900, async () => {
       return await this.discoveryRepository.findDailyPopular();
     });
   }
 
-  async getBrandRecentPosts(brandId: number): Promise<PopularPostDto[]> {
+  async getBrandRecentPosts(brandId: number): Promise<FeedPostDto[]> {
     const cacheKey = `discovery:brand:recent:${brandId}`;
     return await this.redisService.getOrSet(cacheKey, 120, async () => {
       return await this.discoveryRepository.findBrandRecentPosts(brandId);
     });
   }
 
-  async getBrandPopularPosts(brandId: number): Promise<PopularPostDto[]> {
+  async getBrandPopularPosts(brandId: number): Promise<FeedPostDto[]> {
     const cacheKey = `discovery:brand:popular:${brandId}`;
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
       return await this.discoveryRepository.findBrandPopularPosts(brandId);
