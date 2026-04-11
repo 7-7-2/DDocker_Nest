@@ -137,7 +137,7 @@ export class CaffeineService {
 
       return {
         todayCaffeine: row.caffeine_sum ? Number(row.caffeine_sum) : 0,
-        todayCups: row.cup_count,
+        todayCups: Number(row.cup_count),
         items: this.parseItems(row.items),
       };
     });

@@ -41,10 +41,10 @@ export class CommentRepository extends BaseRepository {
     queryRunner?: QueryRunner,
   ): Promise<number> {
     const query = `
-      INSERT INTO reply (user_id, comment_id, post_id, content) 
-      VALUES (?, ?, ?, ?)
+      INSERT INTO reply (user_id, comment_id, content) 
+      VALUES (?, ?, ?)
     `;
-    const params = [data.user_id, data.comment_id, data.post_id, data.content];
+    const params = [data.user_id, data.comment_id, data.content];
 
     if (queryRunner) {
       const header = await queryRunner.query(query, params);
@@ -108,15 +108,15 @@ export class CommentRepository extends BaseRepository {
   async softDeleteReply(
     userId: string,
     replyId: number,
-    postId: string,
+    commentId: number,
     queryRunner?: QueryRunner,
   ): Promise<void> {
     const query = `
       UPDATE reply 
       SET deleted_at = CURRENT_TIMESTAMP 
-      WHERE id = ? AND user_id = ? AND post_id = ?
+      WHERE id = ? AND user_id = ? AND comment_id = ?
     `;
-    const params = [replyId, userId, postId];
+    const params = [replyId, userId, commentId];
     if (queryRunner) {
       await queryRunner.query(query, params);
     } else {
@@ -141,7 +141,7 @@ export class CommentRepository extends BaseRepository {
   async findRepliesByComment(commentId: number): Promise<ReplyWithAuthorRow[]> {
     const query = `
       SELECT 
-        r.id, r.user_id, r.comment_id, r.post_id, r.content, r.created_at, r.deleted_at,
+        r.id, r.user_id, r.comment_id, r.content, r.created_at, r.deleted_at,
         u.nickname, u.profile_url
       FROM reply r
       INNER JOIN user u ON r.user_id = u.public_id
