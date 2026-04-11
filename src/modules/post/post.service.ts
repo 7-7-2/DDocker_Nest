@@ -222,14 +222,14 @@ export class PostService {
   private async getPostSocialCounts(
     postId: string,
   ): Promise<SocialCountsResponseDto | null> {
-    const cacheKey = `post_stats:${postId}`;
+    const cacheKey = `post:stats:${postId}`;
     return await this.redisService.get<SocialCountsResponseDto>(cacheKey);
   }
 
   async getStatsWithFallback(
     postId: string,
   ): Promise<{ likeCount: number; commentCount: number }> {
-    const cacheKey = `post_stats:${postId}`;
+    const cacheKey = `post:stats:${postId}`;
     return await this.redisService.getOrSet(cacheKey, 300, async () => {
       const dbStats = await this.postRepository.findPostStats(postId);
       return {

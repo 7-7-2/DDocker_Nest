@@ -18,7 +18,7 @@ export class CreateReplyDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  postId: string; // Required for stat tracking
+  postId: string;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -106,4 +106,9 @@ export class DeleteReplyDto {
   @IsNotEmpty()
   @IsString()
   postId: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsNumber()
+  commentId: number;
 }

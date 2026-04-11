@@ -154,7 +154,7 @@ export class CommentService {
       await this.commentRepository.softDeleteReply(
         userId,
         dto.replyId,
-        dto.postId,
+        dto.commentId,
         queryRunner,
       );
 
@@ -165,6 +165,7 @@ export class CommentService {
 
       await queryRunner.commitTransaction();
 
+      await this.redisService.del(`comment:replies:${dto.commentId}`);
       await this.redisService.del(`post:comments:${dto.postId}`);
       await this.redisService.del(`post:stats:${dto.postId}`);
     } catch (error) {
@@ -207,7 +208,7 @@ export class CommentService {
       profileUrl: row.profile_url || undefined,
       content: isDeleted ? '삭제된 댓글입니다.' : row.content,
       createdAt: row.created_at,
-      replyCount: row.reply_count,
+      replyCount: Number(row.reply_count),
       isDeleted,
     };
   }
