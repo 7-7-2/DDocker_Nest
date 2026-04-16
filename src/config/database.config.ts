@@ -23,7 +23,13 @@ export default registerAs(
     username: process.env.DB_USER || '',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME,
+    timezone: 'Z',
+    dateStrings: false,
     extra: {
+      typeCast: (field, next) => {
+        if (field.type === 'JSON') return JSON.parse(field.string());
+        return next();
+      },
       connectionLimit:
         parseInt(process.env.DB_CONNECTION_LIMIT as string, 10) || 10,
     },
