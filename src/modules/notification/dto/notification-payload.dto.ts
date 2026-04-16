@@ -10,11 +10,22 @@ export class NotificationPayloadDto {
   senderId: string;
 
   @ApiProperty()
-  nickname: string;
+  senderNickname: string;
 
   @ApiProperty({ required: false })
   postId?: string;
 
   @ApiProperty()
   time: string;
+}
+
+export class NotificationResponseDto extends NotificationPayloadDto {
+  @ApiProperty()
+  notificationId: string;
+
+  @ApiProperty()
+  isRead: boolean;
+
+  @ApiProperty()
+  timestamp: string;
 }

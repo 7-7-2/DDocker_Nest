@@ -305,7 +305,9 @@ export class PostService {
             photo: row.photo,
             productName: row.product_name,
             brandId: row.brand_id,
-            brand: (await this.brandService.resolveBrandName(row.brand_id)) || undefined,
+            brand:
+              (await this.brandService.resolveBrandName(row.brand_id)) ||
+              undefined,
             createdAt: row.created_at,
           })),
         ),

@@ -98,7 +98,7 @@ export class DiscoveryRepository extends BaseRepository {
         ps.like_count as likeCount,
         u.nickname,
         us.sum as userSum, 
-        u.public_id,
+        u.public_id userId,
         u.profile_url as profileUrl,
         p.created_at as createdAt
       FROM post p
@@ -132,7 +132,7 @@ export class DiscoveryRepository extends BaseRepository {
         i.size,
         ps.like_count as likeCount,
         u.nickname,
-        u.public_id,
+        u.public_id as userId,
         u.profile_url as profileUrl,
         us.sum as userSum, 
         p.created_at as createdAt

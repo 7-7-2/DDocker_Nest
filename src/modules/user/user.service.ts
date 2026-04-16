@@ -120,7 +120,10 @@ export class UserService {
 
     if (Object.keys(updateData).length === 0) return;
 
-    await this.userRepository.patchUserProfile(userId, updateData);
+    await this.userRepository.patchUserProfile(
+      userId,
+      brand ? updateData : rest,
+    );
     await this.redisService.del(`user:profile:${userId}`);
   }
 
@@ -161,6 +164,14 @@ export class UserService {
       const counts = await this.userRepository.findUserFollowCounts(userId);
       return counts || { follower: 0, following: 0 };
     });
+  }
+
+  async updateLastNotiRead(userId: string): Promise<void> {
+    await this.userRepository.updateLastNotiRead(userId);
+  }
+
+  async getLastNotiRead(userId: string): Promise<Date | null> {
+    return await this.userRepository.findLastNotiRead(userId);
   }
 
   private async mapToResponseDto(

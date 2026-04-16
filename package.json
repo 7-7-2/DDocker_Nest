@@ -20,7 +20,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1029.0",
     "@aws-sdk/client-s3": "^3.1015.0",
+    "@aws-sdk/lib-dynamodb": "^3.1029.0",
     "@aws-sdk/s3-request-presigner": "^3.1015.0",
     "@nestjs/cache-manager": "^3.1.0",
     "@nestjs/common": "^11.1.17",
@@ -35,6 +37,7 @@
     "cache-manager": "^7.2.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dayjs": "^1.11.20",
     "ioredis": "^5.10.1",
     "mysql2": "^3.20.0",
     "nanoid": "^5.1.7",
@@ -47,7 +50,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.28",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
@@ -65,6 +69,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-kakao": "^1.0.3",
     "@types/supertest": "^6.0.3",
+    "@types/uuid": "^11.0.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",

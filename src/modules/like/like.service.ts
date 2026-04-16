@@ -53,7 +53,7 @@ export class LikeService {
         await this.notificationService.pushNotification(post.user_id, {
           type: 'like',
           senderId: userId,
-          nickname: likerNickname,
+          senderNickname: likerNickname,
           postId: postId,
           time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
         });
