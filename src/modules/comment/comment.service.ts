@@ -67,7 +67,7 @@ export class CommentService {
         await this.notificationService.pushNotification(post.user_id, {
           type: 'comment',
           senderId: userId,
-          nickname: commenterNickname,
+          senderNickname: commenterNickname,
           postId: dto.postId,
           time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
         });

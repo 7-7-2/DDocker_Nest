@@ -32,18 +32,12 @@ export class FollowService {
       throw new BadRequestException('You cannot follow yourself');
     }
 
-    const alreadyFollowing = await this.isFollowing(
-      followerId,
-      followedId,
-    );
+    const alreadyFollowing = await this.isFollowing(followerId, followedId);
     if (alreadyFollowing) {
       throw new ConflictException('Already following this user');
     }
 
-    const isNowMutual = await this.isFollowing(
-      followedId,
-      followerId,
-    );
+    const isNowMutual = await this.isFollowing(followedId, followerId);
 
     const queryRunner = await this.followRepository.getQueryRunner();
     await queryRunner.connect();
@@ -74,9 +68,11 @@ export class FollowService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.sadd(`${this.FOLLOW_SET_PREFIX}${followerId}`, followedId);
+      await this.redisService.sadd(
+        `${this.FOLLOW_SET_PREFIX}${followerId}`,
+        followedId,
+      );
       await this.invalidateFollowCaches(followerId, followedId);
-
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -87,16 +83,13 @@ export class FollowService {
     await this.notificationService.pushNotification(followedId, {
       type: 'follow',
       senderId: followerId,
-      nickname: followerNickname,
+      senderNickname: followerNickname,
       time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
     });
   }
 
   async unfollow(followerId: string, followedId: string): Promise<void> {
-    const isFollowing = await this.isFollowing(
-      followerId,
-      followedId,
-    );
+    const isFollowing = await this.isFollowing(followerId, followedId);
     if (!isFollowing) {
       throw new NotFoundException('You are not following this user');
     }
@@ -130,9 +123,11 @@ export class FollowService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.srem(`${this.FOLLOW_SET_PREFIX}${followerId}`, followedId);
+      await this.redisService.srem(
+        `${this.FOLLOW_SET_PREFIX}${followerId}`,
+        followedId,
+      );
       await this.invalidateFollowCaches(followerId, followedId);
-
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -232,11 +227,14 @@ export class FollowService {
 
   async isFollowing(followerId: string, followedId: string): Promise<boolean> {
     const cacheKey = `${this.FOLLOW_SET_PREFIX}${followerId}`;
-    
+
     const inCache = await this.redisService.sismember(cacheKey, followedId);
     if (inCache) return true;
 
-    const inDb = await this.followRepository.isFollowing(followerId, followedId);
+    const inDb = await this.followRepository.isFollowing(
+      followerId,
+      followedId,
+    );
     if (inDb) {
       await this.redisService.sadd(cacheKey, followedId);
     }

@@ -5,4 +5,5 @@ export interface UserStatsRow {
   post_count: number;
   following_count: number;
   follower_count: number;
+  last_noti_read: Date;
 }

@@ -63,7 +63,7 @@ export class PostRepository extends BaseRepository {
     const query = `
       SELECT post_id, like_count, comment_count 
       FROM post_stats 
-      WHERE post_id = ?
+      WHERE post_id = ? 
     `;
     const results = await this.mysql.query<PostStatsRow>(query, [postId]);
     return results[0];
@@ -172,16 +172,6 @@ export class PostRepository extends BaseRepository {
     `;
     const params = cursor ? [userId, cursor, limit] : [userId, limit];
     return await this.mysql.query(query, params);
-  }
-
-  async countUserPosts(userId: string): Promise<number> {
-    const query = `
-      SELECT COUNT(*) as count 
-      FROM post 
-      WHERE user_id = ? AND deleted_at IS NULL
-    `;
-    const result = await this.mysql.query<{ count: string }>(query, [userId]);
-    return parseInt(result[0].count, 10);
   }
 
   async findUserPostCount(userId: string): Promise<number> {

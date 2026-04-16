@@ -22,6 +22,7 @@ import { FavoriteModule } from './modules/favorite/favorite.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { R2Module } from './providers/r2/r2.module';
+import { DynamoDbModule } from './providers/dynamodb/dynamodb.module';
 //Configs
 import serverConfig from './config/server.config';
 import databaseConfig, { DatabaseConfigName } from './config/database.config';
@@ -96,6 +97,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     R2Module,
     StorageModule,
     DiscoveryModule,
+    DynamoDbModule,
   ],
   controllers: [],
   providers: [

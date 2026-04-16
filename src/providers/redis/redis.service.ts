@@ -7,7 +7,6 @@ import {
 import Redis from 'ioredis';
 import { ConfigType } from '@nestjs/config';
 import redisConfig from '../../config/redis.config';
-import { Observable } from 'rxjs';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -19,26 +18,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    console.log('Connecting to Redis...');
     try {
       this.redisClient = new Redis({
         host: this.redisConfiguration.host,
         port: this.redisConfiguration.port,
         lazyConnect: true,
       });
-
       await this.redisClient.connect();
-      console.log('Redis connection established.');
+      console.log('RedisService (Caching) connected.');
     } catch (error) {
-      console.error('Failed to connect to Redis:', error);
+      console.error('Failed to connect to Redis in RedisService:', error);
     }
   }
 
   async onModuleDestroy() {
     if (this.redisClient && this.redisClient.status === 'ready') {
-      console.log('Disconnecting from Redis...');
       await this.redisClient.quit();
-      console.log('Redis client disconnected.');
     }
   }
 
@@ -48,10 +43,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async set(key: string, value: any, ttl?: number): Promise<string> {
+    const val = JSON.stringify(value);
     if (ttl) {
-      return this.redisClient.setex(key, ttl, JSON.stringify(value));
+      return this.redisClient.setex(key, ttl, val);
     }
-    return this.redisClient.set(key, JSON.stringify(value));
+    return this.redisClient.set(key, val);
   }
 
   async del(key: string | string[]): Promise<number> {
@@ -94,6 +90,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return freshData;
   }
 
+  async publish(channel: string, message: any): Promise<number> {
+    const payload =
+      typeof message === 'string' ? message : JSON.stringify(message);
+    return await this.redisClient.publish(channel, payload);
+  }
+
   async sadd(key: string, ...members: (string | number)[]): Promise<number> {
     return await this.redisClient.sadd(key, ...members);
   }
@@ -109,37 +111,5 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   get client(): Redis {
     return this.redisClient;
-  }
-
-  duplicate(): Redis {
-    return this.redisClient.duplicate();
-  }
-
-  fromChannel(channel: string): Observable<string> {
-    return new Observable<string>((subscriber) => {
-      const redisSubscriber = this.duplicate();
-
-      redisSubscriber
-        .subscribe(channel)
-        .then(() => {
-          redisSubscriber.on('message', (chan, message) => {
-            if (chan === channel) {
-              subscriber.next(message);
-            }
-          });
-        })
-        .catch((err) => {
-          subscriber.error(err);
-        });
-
-      redisSubscriber.on('error', (err) => {
-        subscriber.error(err);
-      });
-
-      return () => {
-        redisSubscriber.unsubscribe(channel).catch(() => {});
-        redisSubscriber.quit().catch(() => {});
-      };
-    });
   }
 }

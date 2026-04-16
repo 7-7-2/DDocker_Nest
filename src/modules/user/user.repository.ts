@@ -62,12 +62,29 @@ export class UserRepository extends BaseRepository {
     userId: string,
     queryRunner?: QueryRunner,
   ): Promise<void> {
-    const query = `INSERT INTO user_stats (user_id, sum) VALUES (?, 0)`;
+    const query = `INSERT INTO user_stats (user_id, sum, last_noti_read) VALUES (?, 0, CURRENT_TIMESTAMP)`;
     if (queryRunner) {
       await queryRunner.query(query, [userId]);
     } else {
       await this.mysql.execute(query, [userId]);
     }
+  }
+
+  async updateLastNotiRead(userId: string): Promise<void> {
+    const query = `
+      UPDATE user_stats 
+      SET last_noti_read = CURRENT_TIMESTAMP 
+      WHERE user_id = ?
+    `;
+    await this.mysql.execute(query, [userId]);
+  }
+
+  async findLastNotiRead(userId: string): Promise<Date | null> {
+    const query = `SELECT last_noti_read FROM user_stats WHERE user_id = ?`;
+    const results = await this.mysql.query<{ last_noti_read: Date }>(query, [
+      userId,
+    ]);
+    return results[0]?.last_noti_read || null;
   }
 
   async findAuthUserByPublicId(
