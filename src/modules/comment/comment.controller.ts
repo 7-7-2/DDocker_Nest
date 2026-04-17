@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
+import { CommentDeleteGuard } from './guard/comment-delete.guard';
 import {
   CreateCommentDto,
   CreateReplyDto,
@@ -81,7 +82,7 @@ export class CommentController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, CommentDeleteGuard)
   @ApiBearerAuth()
   @Delete()
   @ApiOperation({ summary: '댓글 삭제(Soft-delete)' })
@@ -93,7 +94,7 @@ export class CommentController {
     return { success: true };
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, CommentDeleteGuard)
   @ApiBearerAuth()
   @Delete('reply')
   @ApiOperation({ summary: '답글 삭제(Soft-delete)' })

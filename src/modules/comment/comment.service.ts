@@ -122,7 +122,6 @@ export class CommentService {
 
     try {
       await this.commentRepository.softDeleteComment(
-        userId,
         dto.commentId,
         dto.postId,
         queryRunner,
@@ -152,9 +151,9 @@ export class CommentService {
 
     try {
       await this.commentRepository.softDeleteReply(
-        userId,
         dto.replyId,
         dto.commentId,
+        dto.postId,
         queryRunner,
       );
 
@@ -196,6 +195,17 @@ export class CommentService {
           await this.commentRepository.findRepliesByComment(commentId);
         return rows.map((row) => this.mapReplyRowToDto(row));
       },
+    );
+  }
+  async checkDeletionPermission(
+    type: 'comment' | 'reply',
+    id: number,
+    userId: string,
+  ): Promise<boolean> {
+    return await this.commentRepository.checkDeletionPermission(
+      type,
+      id,
+      userId,
     );
   }
 
