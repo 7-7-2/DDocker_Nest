@@ -41,10 +41,10 @@ export class CommentRepository extends BaseRepository {
     queryRunner?: QueryRunner,
   ): Promise<number> {
     const query = `
-      INSERT INTO reply (user_id, comment_id, content) 
-      VALUES (?, ?, ?)
+      INSERT INTO reply (user_id, comment_id, post_id, content) 
+      VALUES (?, ?, ?, ?)
     `;
-    const params = [data.user_id, data.comment_id, data.content];
+    const params = [data.user_id, data.comment_id, data.post_id, data.content];
 
     if (queryRunner) {
       const header = await queryRunner.query(query, params);
@@ -87,7 +87,6 @@ export class CommentRepository extends BaseRepository {
   }
 
   async softDeleteComment(
-    userId: string,
     commentId: number,
     postId: string,
     queryRunner?: QueryRunner,
@@ -95,9 +94,9 @@ export class CommentRepository extends BaseRepository {
     const query = `
       UPDATE comment 
       SET deleted_at = CURRENT_TIMESTAMP 
-      WHERE id = ? AND user_id = ? AND post_id = ?
+      WHERE id = ? AND post_id = ?
     `;
-    const params = [commentId, userId, postId];
+    const params = [commentId, postId];
     if (queryRunner) {
       await queryRunner.query(query, params);
     } else {
@@ -106,17 +105,17 @@ export class CommentRepository extends BaseRepository {
   }
 
   async softDeleteReply(
-    userId: string,
     replyId: number,
     commentId: number,
+    postId: string,
     queryRunner?: QueryRunner,
   ): Promise<void> {
     const query = `
       UPDATE reply 
       SET deleted_at = CURRENT_TIMESTAMP 
-      WHERE id = ? AND user_id = ? AND comment_id = ?
+      WHERE id = ? AND comment_id = ? AND post_id = ?
     `;
-    const params = [replyId, userId, commentId];
+    const params = [replyId, commentId, postId];
     if (queryRunner) {
       await queryRunner.query(query, params);
     } else {
@@ -153,5 +152,28 @@ export class CommentRepository extends BaseRepository {
 
   async getQueryRunner() {
     return this.mysql.getQueryRunner();
+  }
+  async checkDeletionPermission(
+    type: 'comment' | 'reply',
+    id: number,
+    userId: string,
+  ): Promise<boolean> {
+    const table = type === 'comment' ? 'comment' : 'reply';
+    const query = `
+      SELECT 
+        t.user_id AS writer_id,
+        p.user_id AS post_owner_id
+      FROM ${table} t
+      JOIN post p ON t.post_id = p.public_id
+      WHERE t.id = ?
+    `;
+    const rows = await this.mysql.query<{
+      writer_id: string;
+      post_owner_id: string;
+    }>(query, [id]);
+
+    if (rows.length === 0) return false;
+
+    return rows[0].writer_id === userId || rows[0].post_owner_id === userId;
   }
 }
