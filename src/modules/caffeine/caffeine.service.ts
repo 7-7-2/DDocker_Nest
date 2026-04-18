@@ -22,6 +22,13 @@ import {
 
 import { RedisService } from '../../providers/redis/redis.service';
 
+import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 @Injectable()
 export class CaffeineService {
   private readonly logger = new Logger(CaffeineService.name);
@@ -94,8 +101,9 @@ export class CaffeineService {
   }
 
   private async invalidateCaffeineCaches(userId: string) {
-    const now = new Date();
-    const monthKey = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    const fakeKSTNow = dayjs.utc().add(9, 'hour');
+    const monthKey = fakeKSTNow.format('YYYY-MM');
+
     const keys = [
       `caffeine:today:${userId}`,
       `caffeine:monthly:${userId}:${monthKey}`,
@@ -107,23 +115,9 @@ export class CaffeineService {
   async getTodayConsumption(userId: string): Promise<TodayCaffeineResponseDto> {
     const cacheKey = `caffeine:today:${userId}`;
     return await this.redisService.getOrSet(cacheKey, 10800, async () => {
-      const now = new Date();
-      const start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        0,
-        0,
-        0,
-      );
-      const end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
+      const fakeKSTNow = dayjs.utc().add(9, 'hour');
+      const start = fakeKSTNow.startOf('day');
+      const end = fakeKSTNow.endOf('day');
 
       const row = await this.caffeineRepository.findTodayConsumption(
         userId,
@@ -165,16 +159,12 @@ export class CaffeineService {
   async getWeeklyTrend(userId: string): Promise<WeeklyStatsResponseDto> {
     const cacheKey = `caffeine:weekly:${userId}`;
     return await this.redisService.getOrSet(cacheKey, 10800, async () => {
-      const now = new Date();
-      const day = now.getDay();
-      const diffToMonday = day === 0 ? 6 : day - 1;
+      const fakeKSTNow = dayjs.utc().add(9, 'hour');
 
-      const currentMonday = new Date(now);
-      currentMonday.setDate(now.getDate() - diffToMonday);
-      currentMonday.setHours(0, 0, 0, 0);
-
-      const sixWeeksAgoMonday = new Date(currentMonday);
-      sixWeeksAgoMonday.setDate(currentMonday.getDate() - 35);
+      const currentMonday = fakeKSTNow.startOf('week').add(1, 'day');
+      const sixWeeksAgoMonday = currentMonday
+        .subtract(35, 'day')
+        .startOf('day');
 
       const rows = await this.caffeineRepository.findWeeklyCupStats(
         userId,
@@ -182,12 +172,11 @@ export class CaffeineService {
       );
 
       const trend: WeeklyTrendDto[] = rows.map((row) => {
-        const start = new Date(row.week_start);
-        const end = new Date(row.week_end);
-        const label = `${this.formatDateShort(start)}~${this.formatDateShort(end)}`;
+        const start = dayjs(row.week_start);
+        const end = dayjs(row.week_end);
 
         return {
-          range: label,
+          range: `${this.formatDateShort(start)}~${this.formatDateShort(end)}`,
           cups: row.cups,
         };
       });
@@ -195,13 +184,12 @@ export class CaffeineService {
       return { trend };
     });
   }
-
   async getMonthlyView(
     userId: string,
     dateStr: string,
   ): Promise<CaffeineMonthlyViewDto> {
-    const date = new Date(dateStr);
-    const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+    const fakeKSTDate = dayjs.utc(dateStr).add(9, 'hour');
+    const monthKey = fakeKSTDate.format('YYYY-MM');
     const cacheKey = `caffeine:monthly:${userId}:${monthKey}`;
 
     return await this.redisService.getOrSet(cacheKey, 86400, async () => {
@@ -216,9 +204,7 @@ export class CaffeineService {
       const sumsMap: Record<number, number> = {};
 
       rows.forEach((row) => {
-        const day = row.day;
-        const dayKey = day.toString();
-
+        const dayKey = row.day.toString();
         if (!details[dayKey]) details[dayKey] = [];
         details[dayKey].push({
           intakeId: row.id,
@@ -229,48 +215,32 @@ export class CaffeineService {
           shot: row.shot,
           size: row.size,
         });
-
-        sumsMap[day] = (sumsMap[day] || 0) + row.caffeine;
+        sumsMap[row.day] = (sumsMap[row.day] || 0) + row.caffeine;
       });
 
       const summary: CaffeineSummaryItemDto[] = Object.keys(sumsMap)
         .map((day) => parseInt(day, 10))
         .sort((a, b) => a - b)
-        .map((day) => ({
-          day,
-          caffeineSum: sumsMap[day],
-        }));
+        .map((day) => ({ day, caffeineSum: sumsMap[day] }));
 
       return { summary, details };
     });
   }
-
   private getMonthRange(dateStr: string): { start: string; end: string } {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime()))
-      throw new InternalServerErrorException('Invalid date');
-    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0);
-    const lastDay = new Date(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-    );
+    const base = dayjs.utc(dateStr).add(9, 'hour');
+    if (!base.isValid()) throw new InternalServerErrorException('Invalid date');
+
     return {
-      start: this.formatDateForDb(firstDay),
-      end: this.formatDateForDb(lastDay),
+      start: this.formatDateForDb(base.startOf('month')),
+      end: this.formatDateForDb(base.endOf('month')),
     };
   }
 
-  private formatDateForDb(date: Date): string {
-    return date.toISOString().slice(0, 19).replace('T', ' ');
+  private formatDateForDb(date: Date | dayjs.Dayjs): string {
+    return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
   }
 
-  private formatDateShort(date: Date): string {
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
-    return `${m}.${d}`;
+  private formatDateShort(date: Date | dayjs.Dayjs): string {
+    return dayjs(date).format('MM.DD');
   }
 }
