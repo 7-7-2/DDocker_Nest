@@ -9,7 +9,6 @@ import { PostRepository } from './post.repository';
 import {
   PostResponseDto,
   PaginatedPostResponseDto,
-  SocialCountsResponseDto,
 } from './dto/post-response.dto';
 import { PostDetailRow, PostFeedRow } from './entities/post-query.entity';
 import { RedisService } from '../../providers/redis/redis.service';
@@ -130,6 +129,8 @@ export class PostService {
         `user:stats:${userId}`,
         `post:detail:${postId}`,
         `post:stats:${postId}`,
+        `user:posts:${userId}:grid:page1`,
+        `user:posts:${userId}:list:page1`,
       ]);
 
       this.logger.log(`Post ${postId} deleted for user ${userId}`);
@@ -155,6 +156,12 @@ export class PostService {
     }
 
     await this.postRepository.patchPost(postId, dto);
+    await this.redisService.del([
+      `user:stats:${userId}`,
+      `post:detail:${postId}`,
+      `user:posts:${userId}:grid:page1`,
+      `user:posts:${userId}:list:page1`,
+    ]);
   }
 
   async getPostDetail(postId: string): Promise<PostResponseDto> {
@@ -217,13 +224,6 @@ export class PostService {
       posts,
       nextCursor,
     };
-  }
-
-  private async getPostSocialCounts(
-    postId: string,
-  ): Promise<SocialCountsResponseDto | null> {
-    const cacheKey = `post:stats:${postId}`;
-    return await this.redisService.get<SocialCountsResponseDto>(cacheKey);
   }
 
   async getStatsWithFallback(
