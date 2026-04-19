@@ -4,14 +4,16 @@ import {
   Post,
   Delete,
   Body,
-  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { FavoriteService } from './favorite.service';
-import { CreateFavoriteDto, FavoriteResponseDto } from './dto/favorite.dto';
+import {
+  CreateFavoriteDto,
+  FavoriteResponseDto,
+  RemoveFavoriteDto,
+} from './dto/favorite.dto';
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 import {
@@ -40,15 +42,15 @@ export class FavoriteController {
     return { success: true };
   }
 
-  @Delete(':id')
+  @Delete()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '즐겨찾는 메뉴 삭제' })
   @ApiResponse({ status: 200, description: 'Product removed from favorites' })
   async removeFavorite(
     @GetUser('public_id') userId: string,
-    @Param('id', ParseIntPipe) favoriteId: number,
+    @Body() dto: RemoveFavoriteDto,
   ) {
-    await this.favoriteService.removeFavorite(userId, favoriteId);
+    await this.favoriteService.removeFavorite(userId, dto);
     return { success: true };
   }
 
