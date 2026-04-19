@@ -35,12 +35,16 @@ export class FavoriteRepository extends BaseRepository {
     ]);
   }
 
-  async deleteFavorite(userId: string, favoriteId: number): Promise<void> {
+  async deleteFavorite(
+    userId: string,
+    brandId: number,
+    productName: string,
+  ): Promise<void> {
     const query = `
       DELETE FROM favourites 
-      WHERE id = ? AND user_id = ?
+      WHERE user_id = ? AND brand_id = ? AND product_name = ?
     `;
-    await this.mysql.execute(query, [favoriteId, userId]);
+    await this.mysql.execute(query, [userId, brandId, productName]);
   }
 
   async findByUserId(userId: string): Promise<FavoriteRow[]> {
@@ -55,16 +59,18 @@ export class FavoriteRepository extends BaseRepository {
 
   async findOne(
     userId: string,
+    brandId: number,
     productName: string,
   ): Promise<FavoriteRow | null> {
     const query = `
       SELECT id, user_id, brand_id, product_name, caffeine, size, shot, intensity 
       FROM favourites 
-      WHERE user_id = ? AND product_name = ?
+      WHERE user_id = ? AND brand_id = ? AND product_name = ?
       LIMIT 1
     `;
     const results = await this.mysql.query<FavoriteRow>(query, [
       userId,
+      brandId,
       productName,
     ]);
     return results[0] || null;

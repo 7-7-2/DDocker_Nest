@@ -4,7 +4,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FavoriteRepository } from './favorite.repository';
-import { CreateFavoriteDto, FavoriteResponseDto } from './dto/favorite.dto';
+import {
+  CreateFavoriteDto,
+  FavoriteResponseDto,
+  RemoveFavoriteDto,
+} from './dto/favorite.dto';
 import { FavoriteRow } from './entities/favorite.entity';
 import { BrandService } from '../brand/brand.service';
 
@@ -16,13 +20,14 @@ export class FavoriteService {
   ) {}
 
   async addFavorite(userId: string, dto: CreateFavoriteDto): Promise<void> {
-    const brandId = await this.brandService.resolveBrandId(dto.brandId);
+    const brandId = await this.brandService.resolveBrandId(dto.brandName);
     if (!brandId) {
-      throw new BadRequestException(`Invalid brand: ${dto.brandId}`);
+      throw new BadRequestException(`Invalid brand: ${dto.brandName}`);
     }
 
     const existing = await this.favoriteRepository.findOne(
       userId,
+      brandId,
       dto.productName,
     );
     if (existing) {
@@ -39,20 +44,32 @@ export class FavoriteService {
     });
   }
 
-  async removeFavorite(userId: string, favoriteId: number): Promise<void> {
-    await this.favoriteRepository.deleteFavorite(userId, favoriteId);
+  async removeFavorite(userId: string, dto: RemoveFavoriteDto): Promise<void> {
+    const brandId = await this.brandService.resolveBrandId(dto.brandName);
+    if (!brandId) {
+      throw new BadRequestException(`Invalid brand: ${dto.brandName}`);
+    }
+
+    await this.favoriteRepository.deleteFavorite(
+      userId,
+      brandId,
+      dto.productName,
+    );
   }
 
   async getMyFavorites(userId: string): Promise<FavoriteResponseDto[]> {
     const rows = await this.favoriteRepository.findByUserId(userId);
-    return rows.map((row) => this.mapToResponseDto(row));
+    return Promise.all(rows.map((row) => this.mapToResponseDto(row)));
   }
 
-  private mapToResponseDto(row: FavoriteRow): FavoriteResponseDto {
+  private async mapToResponseDto(
+    row: FavoriteRow,
+  ): Promise<FavoriteResponseDto> {
+    const brandName = await this.brandService.resolveBrandName(row.brand_id);
     return {
       id: row.id,
       userId: row.user_id,
-      brandId: row.brand_id,
+      brandName: brandName || 'Unknown',
       productName: row.product_name,
       caffeine: row.caffeine,
       size: row.size,
