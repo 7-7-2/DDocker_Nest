@@ -16,8 +16,20 @@ export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
   @Get()
-  @ApiOperation({ summary: '닉네임으로 유저 탐색' })
-  @ApiQuery({ name: 'q', description: 'Nickname search term' })
+  @ApiOperation({ summary: '유저 또는 포스트 탐색' })
+  @ApiQuery({ name: 'q', description: 'Search term' })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['user', 'post'],
+    description: 'Search type (default: user)',
+  })
+  @ApiQuery({
+    name: 'sort',
+    required: false,
+    enum: ['likes', 'recent'],
+    description: 'Sort order for posts (default: likes)',
+  })
   @ApiQuery({
     name: 'cursor',
     required: false,
@@ -28,11 +40,23 @@ export class SearchController {
     required: false,
     description: 'Number of results (default: 5)',
   })
-  async searchUsers(
-    @Query('q') nickname: string,
+  async search(
+    @Query('q') q: string,
+    @Query('type') type: 'user' | 'post' = 'user',
+    @Query('sort') sort: 'likes' | 'recent' = 'likes',
     @Query('cursor') cursor?: string,
     @Query('limit') limit: number = 5,
   ) {
+    if (type === 'post') {
+      return await this.searchService.searchPosts(
+        q,
+        Number(limit),
+        sort,
+        cursor,
+      );
+    }
+
+    // Default: User search
     let cursorNickname: string | undefined;
     let cursorId: string | undefined;
 
@@ -44,7 +68,7 @@ export class SearchController {
     }
 
     return await this.searchService.searchUsers(
-      nickname,
+      q,
       Number(limit),
       cursorNickname,
       cursorId,
