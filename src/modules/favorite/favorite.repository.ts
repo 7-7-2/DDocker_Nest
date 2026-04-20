@@ -35,16 +35,12 @@ export class FavoriteRepository extends BaseRepository {
     ]);
   }
 
-  async deleteFavorite(
-    userId: string,
-    brandId: number,
-    productName: string,
-  ): Promise<void> {
+  async deleteFavorite(userId: string, id: number): Promise<void> {
     const query = `
       DELETE FROM favourites 
-      WHERE user_id = ? AND brand_id = ? AND product_name = ?
+      WHERE id = ? AND user_id = ?
     `;
-    await this.mysql.execute(query, [userId, brandId, productName]);
+    await this.mysql.execute(query, [id, userId]);
   }
 
   async findByUserId(userId: string): Promise<FavoriteRow[]> {
