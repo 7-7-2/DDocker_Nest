@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { FavoriteRepository } from './favorite.repository';
 import {
   CreateFavoriteDto,
@@ -21,13 +25,34 @@ export class FavoriteService {
       throw new BadRequestException(`Invalid brand: ${dto.brand}`);
     }
 
+    const size = dto.size;
+    const shot = dto.shot ?? 0;
+    const intensity = dto.intensity ?? '기본';
+
+    const favorites = await this.favoriteRepository.findFavorites(
+      userId,
+      brandId,
+      dto.productName,
+    );
+
+    const isDuplicate = favorites.some(
+      (v: FavoriteRow) =>
+        v.size === size && v.shot === shot && v.intensity === intensity,
+    );
+
+    if (isDuplicate) {
+      throw new ConflictException(
+        'This exact product configuration is already in your favorites',
+      );
+    }
+
     await this.favoriteRepository.insertFavorite(userId, {
       brandId: brandId,
       productName: dto.productName,
       caffeine: dto.caffeine,
-      size: dto.size,
-      shot: dto.shot ?? 0,
-      intensity: dto.intensity ?? '기본',
+      size,
+      shot,
+      intensity,
     });
   }
 
