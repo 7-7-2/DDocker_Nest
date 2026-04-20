@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  ConflictException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { FavoriteRepository } from './favorite.repository';
 import {
   CreateFavoriteDto,
@@ -20,18 +16,9 @@ export class FavoriteService {
   ) {}
 
   async addFavorite(userId: string, dto: CreateFavoriteDto): Promise<void> {
-    const brandId = await this.brandService.resolveBrandId(dto.brandName);
+    const brandId = await this.brandService.resolveBrandId(dto.brand);
     if (!brandId) {
-      throw new BadRequestException(`Invalid brand: ${dto.brandName}`);
-    }
-
-    const existing = await this.favoriteRepository.findOne(
-      userId,
-      brandId,
-      dto.productName,
-    );
-    if (existing) {
-      throw new ConflictException('Product already in favorites');
+      throw new BadRequestException(`Invalid brand: ${dto.brand}`);
     }
 
     await this.favoriteRepository.insertFavorite(userId, {
@@ -45,16 +32,7 @@ export class FavoriteService {
   }
 
   async removeFavorite(userId: string, dto: RemoveFavoriteDto): Promise<void> {
-    const brandId = await this.brandService.resolveBrandId(dto.brandName);
-    if (!brandId) {
-      throw new BadRequestException(`Invalid brand: ${dto.brandName}`);
-    }
-
-    await this.favoriteRepository.deleteFavorite(
-      userId,
-      brandId,
-      dto.productName,
-    );
+    await this.favoriteRepository.deleteFavorite(userId, dto.id);
   }
 
   async getMyFavorites(userId: string): Promise<FavoriteResponseDto[]> {
@@ -69,7 +47,7 @@ export class FavoriteService {
     return {
       id: row.id,
       userId: row.user_id,
-      brandName: brandName || 'Unknown',
+      brand: brandName || 'Unknown',
       productName: row.product_name,
       caffeine: row.caffeine,
       size: row.size,

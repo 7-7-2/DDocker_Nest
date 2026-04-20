@@ -10,7 +10,7 @@ import {
 export class CreateFavoriteDto {
   @ApiProperty({ example: 'Starbucks' })
   @IsNotEmpty()
-  brandName: number | string;
+  brand: number | string;
 
   @ApiProperty()
   @IsString()
@@ -39,14 +39,10 @@ export class CreateFavoriteDto {
 }
 
 export class RemoveFavoriteDto {
-  @ApiProperty({ example: 'Starbucks' })
+  @ApiProperty({ example: 1 })
+  @IsNumber()
   @IsNotEmpty()
-  brandName: number | string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  productName: string;
+  id: number;
 }
 
 export class FavoriteResponseDto {
@@ -57,7 +53,7 @@ export class FavoriteResponseDto {
   userId: string;
 
   @ApiProperty()
-  brandName: string;
+  brand: string;
 
   @ApiProperty()
   productName: string;
