@@ -11,15 +11,18 @@ export interface BrandRankingRow {
 export interface PopularPostRow {
   postId: string;
   photo: string;
-  productName: string;
-  brandId: number;
-  brandName: string;
-  caffeine: number;
-  shot: number;
+  productName?: string;
+  brandId?: number;
+  brandName?: string;
+  caffeine?: number;
+  shot?: number;
   likeCount: number;
+  commentCount?: number;
+  description?: string;
   nickname?: string;
   profileUrl?: string;
   createdAt?: Date;
+  userId?: string;
 }
 
 export interface BrandPopularMenuRow {
@@ -61,16 +64,15 @@ export class DiscoveryRepository extends BaseRepository {
       SELECT 
         p.public_id as postId,
         p.photo,
-        i.product_name as productName,
-        i.brand_id as brandId,
-        b.brand_name as brandName,
-        i.caffeine,
-        i.shot,
-        ps.like_count as likeCount
+        ps.like_count as likeCount,
+        ps.comment_count as commentCount,
+        p.description,
+        p.created_at as createdAt,
+        u.profile_url as profileUrl,
+        u.nickname,
+        u.public_id as userId
       FROM post p
       INNER JOIN user u ON p.user_id = u.public_id
-      INNER JOIN caffeine_intake i ON p.caffeine_intake_id = i.id
-      INNER JOIN brand b ON i.brand_id = b.id
       INNER JOIN post_stats ps ON p.public_id = ps.post_id
       WHERE p.deleted_at IS NULL
         AND u.deleted_at IS NULL
@@ -78,7 +80,7 @@ export class DiscoveryRepository extends BaseRepository {
         AND u.visibility = 1
         AND DATE(p.created_at) = CURDATE()
       ORDER BY ps.like_count DESC
-      LIMIT 4
+      LIMIT 8
     `;
     return await this.mysql.query<PopularPostRow>(query);
   }
