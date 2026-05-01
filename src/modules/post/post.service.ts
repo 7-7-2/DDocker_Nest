@@ -77,7 +77,11 @@ export class PostService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.del(`user:stats:${userId}`);
+      await this.redisService.del([
+        `user:stats:${userId}`,
+        `user:posts:${userId}:grid:page1`,
+        `user:posts:${userId}:list:page1`,
+      ]);
 
       this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
     } catch (error) {
