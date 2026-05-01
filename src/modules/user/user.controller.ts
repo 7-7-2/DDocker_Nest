@@ -8,7 +8,9 @@ import {
   Delete,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { UserService } from './user.service';
 import { PostService } from '../post/post.service';
 import { UserProfilePostsResponseDto } from './dto/user-profile-posts.dto';
@@ -35,8 +37,21 @@ export class UserController {
   @Post()
   @ApiOperation({ summary: 'OAuth 이후 새 유저 등록' })
   @ApiResponse({ status: 201, description: 'User successfully initialized' })
-  async setUserInit(@Body() createUserDto: CreateUserDto) {
-    return await this.userService.setUserInit(createUserDto);
+  async setUserInit(
+    @Body() createUserDto: CreateUserDto,
+    @Res() res: Response,
+  ) {
+    const result = await this.userService.setUserInit(createUserDto);
+
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    return res.status(201).send({ data: result.accessToken });
   }
 
   @Get('check')

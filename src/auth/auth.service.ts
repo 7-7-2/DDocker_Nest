@@ -1,4 +1,10 @@
-import { Injectable, HttpStatus, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  HttpStatus,
+  Inject,
+  forwardRef,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from '../modules/user/user.service';
@@ -29,9 +35,42 @@ export class AuthService {
 
   async login(user: UserRow) {
     const payload: JwtPayload = { sub: user.public_id };
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.getOrThrow<string>('ACCESS_TOKEN_SECRET'),
+      expiresIn: '5m',
+    });
+    const refreshToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.getOrThrow<string>('REFRESH_TOKEN_SECRET'),
+      expiresIn: '7d',
+    });
+
+    // Store refresh token in Redis (7 days TTL)
+    await this.redisService.set(
+      `refresh_token:${user.public_id}`,
+      refreshToken,
+      7 * 24 * 60 * 60,
+    );
+
     return {
-      accessToken: await this.jwtService.signAsync(payload),
+      accessToken,
+      refreshToken,
     };
+  }
+
+  async refresh(user: UserRow, refreshToken: string) {
+    const savedToken = await this.redisService.get<string>(
+      `refresh_token:${user.public_id}`,
+    );
+
+    if (savedToken !== refreshToken) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.login(user);
+  }
+
+  async logout(userId: string) {
+    await this.redisService.del(`refresh_token:${userId}`);
   }
 
   async processOAuthLogin(oauthUser: OAuthUser): Promise<AuthResponseDto> {
@@ -43,9 +82,10 @@ export class AuthService {
 
     if (user) {
       // Flow A: Login (Status 200)
-      const { accessToken } = await this.login(user);
+      const { accessToken, refreshToken } = await this.login(user);
       return {
         accessToken,
+        refreshToken,
         socialToken: 'not-needed-for-login',
         status: HttpStatus.OK,
       };

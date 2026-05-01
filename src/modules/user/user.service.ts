@@ -30,7 +30,9 @@ export class UserService {
     private readonly authService: AuthService,
   ) {}
 
-  async setUserInit(dto: CreateUserDto): Promise<string> {
+  async setUserInit(
+    dto: CreateUserDto,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const oauthUser = await this.redisService.get<OAuthUser>(
       `auth_handover:${dto.socialToken}`,
     );
@@ -73,8 +75,11 @@ export class UserService {
         throw new InternalServerErrorException('Failed to retrieve new user');
       }
 
-      const loginResult = await this.authService.login(user);
-      return `Bearer ${loginResult.accessToken}`;
+      const { accessToken, refreshToken } = await this.authService.login(user);
+      return {
+        accessToken: `Bearer ${accessToken}`,
+        refreshToken,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
 

@@ -19,6 +19,10 @@ export class UserProfilePostsResponseDto {
   @ApiProperty({ type: [PostResponseDto], required: false })
   listPosts?: PostResponseDto[];
 
-  @ApiProperty({ example: '2023-01-01T00:00:00.000Z', required: false, nullable: true })
+  @ApiProperty({
+    example: '2023-01-01T00:00:00.000Z',
+    required: false,
+    nullable: true,
+  })
   nextCursor?: string | null;
 }
