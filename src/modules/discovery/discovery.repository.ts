@@ -64,10 +64,10 @@ export class DiscoveryRepository extends BaseRepository {
       SELECT 
         p.public_id as postId,
         p.photo,
-        ps.like_count as likeCount,
-        ps.comment_count as commentCount,
         p.description,
         p.created_at as createdAt,
+        ps.like_count as likeCount,
+        ps.comment_count as commentCount,
         u.profile_url as profileUrl,
         u.nickname,
         u.public_id as userId
@@ -90,6 +90,7 @@ export class DiscoveryRepository extends BaseRepository {
       SELECT 
         p.public_id as postId,
         p.photo,
+        p.description,
         i.product_name as productName,
         i.brand_id as brandId,
         b.brand_name as brandName,
@@ -125,6 +126,7 @@ export class DiscoveryRepository extends BaseRepository {
       SELECT 
         p.public_id as postId,
         p.photo,
+        p.description,
         i.product_name as productName,
         i.brand_id as brandId,
         b.brand_name as brandName,
