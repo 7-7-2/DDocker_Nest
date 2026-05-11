@@ -109,6 +109,39 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return result === 1;
   }
 
+  async zincrby(
+    key: string,
+    increment: number,
+    member: string | number,
+  ): Promise<string> {
+    return await this.redisClient.zincrby(key, increment, member);
+  }
+
+  async zrevrangeWithScores(
+    key: string,
+    start: number,
+    stop: number,
+  ): Promise<{ value: string; score: number }[]> {
+    const results = await this.redisClient.zrevrange(
+      key,
+      start,
+      stop,
+      'WITHSCORES',
+    );
+    const pairs: { value: string; score: number }[] = [];
+    for (let i = 0; i < results.length; i += 2) {
+      pairs.push({
+        value: results[i],
+        score: parseFloat(results[i + 1]),
+      });
+    }
+    return pairs;
+  }
+
+  async expire(key: string, seconds: number): Promise<number> {
+    return await this.redisClient.expire(key, seconds);
+  }
+
   get client(): Redis {
     return this.redisClient;
   }
