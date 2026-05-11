@@ -7,33 +7,74 @@ import {
 } from './dto/discovery-response.dto';
 
 import { RedisService } from '../../providers/redis/redis.service';
+import { BrandService } from '../brand/brand.service';
+
+import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
+import * as advancedFormat from 'dayjs/plugin/advancedFormat';
+import * as isoWeek from 'dayjs/plugin/isoWeek';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(advancedFormat);
+dayjs.extend(isoWeek);
 
 @Injectable()
 export class DiscoveryService {
   constructor(
     private readonly discoveryRepository: DiscoveryRepository,
     private readonly redisService: RedisService,
+    private readonly brandService: BrandService,
   ) {}
 
   async getBrandRanking(): Promise<BrandRankingDto[]> {
-    const cacheKey = 'discovery:ranking';
-    return await this.redisService.getOrSet(cacheKey, 3600, async () => {
-      const weeklyRanking =
-        await this.discoveryRepository.findBrandRanking(true);
-      if (weeklyRanking.length >= 5) {
-        return weeklyRanking;
+    const fakeKSTNow = dayjs.utc().add(9, 'hour');
+    const weeklyKey = `brand:ranking:weekly:${fakeKSTNow.format('GGGG-WW')}`;
+    const allKey = 'brand:ranking:all';
+
+    const ranking = await this.redisService.zrevrangeWithScores(weeklyKey, 0, 4);
+    const existingIds = new Set(ranking.map((r) => parseInt(r.value, 10)));
+
+    if (ranking.length < 5) {
+      const allTime = await this.redisService.zrevrangeWithScores(allKey, 0, 10);
+      for (const item of allTime) {
+        const id = parseInt(item.value, 10);
+        if (!existingIds.has(id)) {
+          ranking.push(item);
+          existingIds.add(id);
+          if (ranking.length >= 5) break;
+        }
       }
+    }
 
-      const allTimeRanking =
-        await this.discoveryRepository.findBrandRanking(false);
-      const weeklyBrandIds = new Set(weeklyRanking.map((r) => r.brandId));
+    if (ranking.length < 5) {
+      const dbRanking = await this.discoveryRepository.findBrandRanking(false);
+      for (const row of dbRanking) {
+        if (!existingIds.has(row.brandId)) {
+          ranking.push({
+            value: row.brandId.toString(),
+            score: row.intakeCount,
+          });
+          existingIds.add(row.brandId);
+          if (ranking.length >= 5) break;
+        }
+      }
+    }
 
-      const additionalRanking = allTimeRanking.filter(
-        (r) => !weeklyBrandIds.has(r.brandId),
-      );
-
-      return [...weeklyRanking, ...additionalRanking].slice(0, 5);
-    });
+    // Map to DTO
+    return await Promise.all(
+      ranking.map(async (item) => {
+        const brandId = parseInt(item.value, 10);
+        const brandName =
+          (await this.brandService.resolveBrandName(brandId)) || 'Unknown';
+        return {
+          brandId,
+          brandName,
+          intakeCount: item.score,
+        };
+      }),
+    );
   }
 
   async getDailyPopular(): Promise<FeedPostDto[]> {

@@ -137,6 +137,8 @@ export class PostService {
         `user:posts:${userId}:list:page1`,
       ]);
 
+      await this.caffeineService.updateBrandRanking(post.brand_id, -1, post.created_at);
+
       this.logger.log(`Post ${postId} deleted for user ${userId}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();

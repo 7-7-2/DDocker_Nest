@@ -25,9 +25,13 @@ import { RedisService } from '../../providers/redis/redis.service';
 import * as dayjs from 'dayjs';
 import * as utc from 'dayjs/plugin/utc';
 import * as timezone from 'dayjs/plugin/timezone';
+import * as advancedFormat from 'dayjs/plugin/advancedFormat';
+import * as isoWeek from 'dayjs/plugin/isoWeek';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(advancedFormat);
+dayjs.extend(isoWeek);
 
 @Injectable()
 export class CaffeineService {
@@ -82,6 +86,7 @@ export class CaffeineService {
       }
 
       await this.invalidateCaffeineCaches(userId);
+      await this.updateBrandRanking(brandId, 1);
 
       this.logger.log(`Intake ${intakeId} logged for user ${userId}`);
       return intakeId;
@@ -242,5 +247,32 @@ export class CaffeineService {
 
   private formatDateShort(date: Date | dayjs.Dayjs): string {
     return dayjs(date).format('MM.DD');
+  }
+
+  async updateBrandRanking(
+    brandId: number,
+    increment: number,
+    date?: Date | dayjs.Dayjs,
+  ) {
+    const { allKey, weeklyKey } = this.getBrandRankingKeys(date);
+
+    try {
+      await this.redisService.zincrby(allKey, increment, brandId);
+      await this.redisService.zincrby(weeklyKey, increment, brandId);
+      await this.redisService.expire(weeklyKey, 14 * 24 * 3600);
+    } catch (error) {
+      this.logger.error(
+        `Failed to update brand ranking for brand ${brandId}`,
+        error,
+      );
+    }
+  }
+
+  private getBrandRankingKeys(date?: Date | dayjs.Dayjs) {
+    const fakeKSTNow = date ? dayjs(date) : dayjs.utc().add(9, 'hour');
+    const weeklyKey = `brand:ranking:weekly:${fakeKSTNow.format('GGGG-WW')}`;
+    const allKey = 'brand:ranking:all';
+
+    return { allKey, weeklyKey };
   }
 }
