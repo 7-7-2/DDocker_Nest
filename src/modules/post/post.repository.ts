@@ -224,4 +224,19 @@ export class PostRepository extends BaseRepository {
   async getQueryRunner() {
     return this.mysql.getQueryRunner();
   }
+
+  async findPostByIntakeId(
+    intakeId: number,
+  ): Promise<{ public_id: string } | null> {
+    const query = `
+      SELECT public_id 
+      FROM post 
+      WHERE caffeine_intake_id = ? AND deleted_at IS NULL
+      LIMIT 1
+    `;
+    const results = await this.mysql.query<{ public_id: string }>(query, [
+      intakeId,
+    ]);
+    return results[0] || null;
+  }
 }

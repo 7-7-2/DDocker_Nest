@@ -176,4 +176,14 @@ export class CaffeineRepository extends BaseRepository {
   async getQueryRunner() {
     return this.mysql.getQueryRunner();
   }
+
+  async findById(id: number): Promise<{ user_id: string; caffeine: number; brand_id: number; created_at: Date } | null> {
+    const query = `
+      SELECT user_id, caffeine, brand_id, created_at
+      FROM caffeine_intake 
+      WHERE id = ? AND deleted_at IS NULL
+    `;
+    const results = await this.mysql.query<any>(query, [id]);
+    return results[0] || null;
+  }
 }

@@ -3,6 +3,10 @@ import {
   InternalServerErrorException,
   Logger,
   BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { QueryRunner } from 'typeorm';
 import { CreateCaffeineDto } from './dto/create-caffeine.dto';
@@ -21,6 +25,7 @@ import {
 } from './dto/caffeine-stats.dto';
 
 import { RedisService } from '../../providers/redis/redis.service';
+import { PostService } from '../post/post.service';
 
 import * as dayjs from 'dayjs';
 import * as utc from 'dayjs/plugin/utc';
@@ -41,6 +46,8 @@ export class CaffeineService {
     private readonly caffeineRepository: CaffeineRepository,
     private readonly brandService: BrandService,
     private readonly redisService: RedisService,
+    @Inject(forwardRef(() => PostService))
+    private readonly postService: PostService,
   ) {}
 
   async logIntake(
@@ -105,14 +112,72 @@ export class CaffeineService {
     }
   }
 
-  private async invalidateCaffeineCaches(userId: string) {
-    const fakeKSTNow = dayjs.utc().add(9, 'hour');
-    const monthKey = fakeKSTNow.format('YYYY-MM');
+  async deleteIntake(userId: string, intakeId: number): Promise<void> {
+    const intake = await this.caffeineRepository.findById(intakeId);
+    if (!intake) {
+      throw new NotFoundException('Intake record not found');
+    }
+
+    if (intake.user_id !== userId) {
+      throw new UnauthorizedException('Unauthorized intake deletion');
+    }
+
+    const postId = await this.postService.getPostByIntakeId(intakeId);
+
+    if (postId) {
+      return await this.postService.deletePost(userId, postId);
+    }
+
+    const queryRunner = await this.caffeineRepository.getQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.caffeineRepository.softDeleteIntake(intakeId, queryRunner);
+      await this.caffeineRepository.updateUserStatsSum(
+        userId,
+        -intake.caffeine,
+        queryRunner,
+      );
+
+      await queryRunner.commitTransaction();
+
+      await this.invalidateCaffeineCaches(userId, intake.created_at);
+      await this.updateBrandRanking(intake.brand_id, -1, intake.created_at);
+
+      this.logger.log(
+        `Standalone intake ${intakeId} deleted for user ${userId}`,
+      );
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(
+        `Failed to delete standalone intake ${intakeId}`,
+        error,
+      );
+      throw new InternalServerErrorException('Failed to delete intake');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async getPostByIntakeId(intakeId: number): Promise<string | null> {
+    return await this.postService.getPostByIntakeId(intakeId);
+  }
+
+  private async invalidateCaffeineCaches(
+    userId: string,
+    date?: Date | dayjs.Dayjs,
+  ) {
+    const targetDate = date
+      ? dayjs(date).add(9, 'hour')
+      : dayjs.utc().add(9, 'hour');
+    const monthKey = targetDate.format('YYYY-MM');
 
     const keys = [
       `caffeine:today:${userId}`,
       `caffeine:monthly:${userId}:${monthKey}`,
       `user:profile:${userId}`,
+      `user:stats:${userId}`,
     ];
     await this.redisService.del(keys);
   }
