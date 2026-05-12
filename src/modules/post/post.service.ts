@@ -18,6 +18,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { CaffeineRepository } from '../caffeine/caffeine.repository';
 import { UserProfilePostsResponseDto } from '../user/dto/user-profile-posts.dto';
 import { BrandService } from '../brand/brand.service';
+import * as dayjs from 'dayjs';
 
 @Injectable()
 export class PostService {
@@ -93,6 +94,11 @@ export class PostService {
     }
   }
 
+  async getPostByIntakeId(intakeId: number): Promise<string | null> {
+    const post = await this.postRepository.findPostByIntakeId(intakeId);
+    return post ? post.public_id : null;
+  }
+
   async deletePost(userId: string, postId: string): Promise<void> {
     const post = await this.postRepository.findPostDetail(postId);
     if (!post) {
@@ -129,12 +135,22 @@ export class PostService {
 
       await queryRunner.commitTransaction();
 
+      // Clear common post caches
       await this.redisService.del([
         `user:stats:${userId}`,
         `post:detail:${postId}`,
         `post:stats:${postId}`,
         `user:posts:${userId}:grid:page1`,
         `user:posts:${userId}:list:page1`,
+      ]);
+
+      // NEW: Clear caffeine caches to update main page / stats immediately
+      const intakeDate = dayjs(post.created_at).add(9, 'hour');
+      const monthKey = intakeDate.format('YYYY-MM');
+      await this.redisService.del([
+        `caffeine:today:${userId}`,
+        `caffeine:monthly:${userId}:${monthKey}`,
+        `user:profile:${userId}`,
       ]);
 
       await this.caffeineService.updateBrandRanking(post.brand_id, -1, post.created_at);
