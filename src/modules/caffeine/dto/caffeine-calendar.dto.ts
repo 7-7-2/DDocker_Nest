@@ -35,7 +35,7 @@ export class CaffeineDetailItemDto {
   caffeine: number;
 
   @ApiProperty()
-  menu: string;
+  productName: string;
 
   @ApiProperty()
   intensity: string;

@@ -280,7 +280,7 @@ export class CaffeineService {
           intakeId: row.id,
           brand: row.brand_name,
           caffeine: row.caffeine,
-          menu: row.product_name,
+          productName: row.product_name,
           intensity: row.intensity,
           shot: row.shot,
           size: row.size,
