@@ -23,7 +23,7 @@ import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { CaffeineMonthlyViewDto } from './dto/caffeine-calendar.dto';
 import {
   TodayCaffeineResponseDto,
-  WeeklyStatsResponseDto,
+  MonthlyStatsResponseDto,
 } from './dto/caffeine-stats.dto';
 
 @ApiTags('Caffeine')
@@ -67,13 +67,14 @@ export class CaffeineController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Get('stats/weekly')
-  @ApiOperation({ summary: '6주 섭취 동향(주당 몇 잔)' })
-  @ApiResponse({ status: 200, type: WeeklyStatsResponseDto })
-  async getWeeklyTrend(
+  @Get('stats/monthly')
+  @ApiOperation({ summary: '월별 섭취 동향 (주차별 5주)' })
+  @ApiResponse({ status: 200, type: MonthlyStatsResponseDto })
+  async getMonthlyTrend(
     @GetUser('public_id') userId: string,
-  ): Promise<WeeklyStatsResponseDto> {
-    return await this.caffeineService.getWeeklyTrend(userId);
+    @Query('date') date?: string, // Expecting YYYY-MM-DD
+  ): Promise<MonthlyStatsResponseDto> {
+    return await this.caffeineService.getMonthlyTrend(userId, date);
   }
 
   @UseGuards(JwtAuthGuard)

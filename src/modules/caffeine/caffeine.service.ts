@@ -20,8 +20,8 @@ import {
 import {
   TodayCaffeineItemDto,
   TodayCaffeineResponseDto,
-  WeeklyStatsResponseDto,
-  WeeklyTrendDto,
+  MonthlyStatsResponseDto,
+  MonthlyWeekTrendDto,
 } from './dto/caffeine-stats.dto';
 
 import { RedisService } from '../../providers/redis/redis.service';
@@ -171,11 +171,26 @@ export class CaffeineService {
     const targetDate = date
       ? dayjs(date).add(9, 'hour')
       : dayjs.utc().add(9, 'hour');
-    const monthKey = targetDate.format('YYYY-MM');
+
+    const calendarMonthKey = targetDate.format('YYYY-MM');
+
+    const refThursday = targetDate.startOf('isoWeek').add(3, 'day');
+    const logicalMonthKey = refThursday.format('YYYY-MM');
+
+    const currentRange = this.getLogicalMonthRange(
+      refThursday.startOf('month'),
+    );
+    const nextLogicalMonthRef = currentRange.end.add(1, 'day');
+    const nextRefThursday = nextLogicalMonthRef
+      .startOf('isoWeek')
+      .add(3, 'day');
+    const nextLogicalMonthKey = nextRefThursday.format('YYYY-MM');
 
     const keys = [
       `caffeine:today:${userId}`,
-      `caffeine:monthly:${userId}:${monthKey}`,
+      `caffeine:monthly:${userId}:${calendarMonthKey}`,
+      `caffeine:monthly_stats:${userId}:${logicalMonthKey}`,
+      `caffeine:monthly_stats:${userId}:${nextLogicalMonthKey}`,
       `user:profile:${userId}`,
       `user:stats:${userId}`,
     ];
@@ -226,33 +241,147 @@ export class CaffeineService {
     return [];
   }
 
-  async getWeeklyTrend(userId: string): Promise<WeeklyStatsResponseDto> {
-    const cacheKey = `caffeine:weekly:${userId}`;
-    return await this.redisService.getOrSet(cacheKey, 10800, async () => {
-      const fakeKSTNow = dayjs.utc().add(9, 'hour');
+  async getMonthlyTrend(
+    userId: string,
+    dateStr?: string,
+  ): Promise<MonthlyStatsResponseDto> {
+    const inputDate = dateStr
+      ? dayjs.utc(dateStr).add(9, 'hour')
+      : dayjs.utc().add(9, 'hour');
 
-      const currentMonday = fakeKSTNow.startOf('week').add(1, 'day');
-      const sixWeeksAgoMonday = currentMonday
-        .subtract(35, 'day')
-        .startOf('day');
+    const refThursday = inputDate.startOf('isoWeek').add(3, 'day');
+    const logicalMonthDate = refThursday.startOf('month');
+    const monthKey = logicalMonthDate.format('YYYY-MM');
+    const cacheKey = `caffeine:monthly_stats:${userId}:${monthKey}`;
 
-      const rows = await this.caffeineRepository.findWeeklyCupStats(
-        userId,
-        this.formatDateForDb(sixWeeksAgoMonday),
-      );
+    return await this.redisService.getOrSet(cacheKey, 3600, async () => {
+      const currentRange = this.getLogicalMonthRange(logicalMonthDate);
 
-      const trend: WeeklyTrendDto[] = rows.map((row) => {
-        const start = dayjs(row.week_start);
-        const end = dayjs(row.week_end);
+      const previousLogicalMonthRef = currentRange.start.subtract(1, 'day');
+      const previousRefThursday = previousLogicalMonthRef
+        .startOf('isoWeek')
+        .add(3, 'day');
+      const previousLogicalMonthDate = previousRefThursday.startOf('month');
 
+      const previousRange = this.getLogicalMonthRange(previousLogicalMonthDate);
+
+      const [currentIntakes, previousIntakes] = await Promise.all([
+        this.caffeineRepository.findIntakesInRange(
+          userId,
+          this.formatDateForDb(currentRange.start),
+          this.formatDateForDb(currentRange.end),
+        ),
+        this.caffeineRepository.findIntakesInRange(
+          userId,
+          this.formatDateForDb(previousRange.start),
+          this.formatDateForDb(previousRange.end),
+        ),
+      ]);
+
+      if (currentIntakes.length === 0) {
         return {
-          range: `${this.formatDateShort(start)}~${this.formatDateShort(end)}`,
-          cups: row.cups,
+          weeks: [],
+          comparison: {
+            cups: this.calculateComparison(0, previousIntakes.length),
+            caffeine: this.calculateComparison(
+              0,
+              previousIntakes.reduce((sum, i) => sum + i.caffeine, 0),
+            ),
+          },
         };
-      });
+      }
 
-      return { trend };
+      const weeks: MonthlyWeekTrendDto[] = [];
+      let currentWeekStart = currentRange.start;
+      let weekNum = 1;
+
+      while (
+        currentWeekStart.isBefore(currentRange.end) ||
+        currentWeekStart.isSame(currentRange.end, 'day')
+      ) {
+        const currentWeekEnd = currentWeekStart.endOf('isoWeek');
+        const weekIntakes = currentIntakes.filter((i) => {
+          const intakeDate = dayjs(i.created_at);
+          return (
+            (intakeDate.isAfter(currentWeekStart) ||
+              intakeDate.isSame(currentWeekStart)) &&
+            (intakeDate.isBefore(currentWeekEnd) ||
+              intakeDate.isSame(currentWeekEnd))
+          );
+        });
+
+        weeks.push({
+          weekNum,
+          cups: weekIntakes.length,
+          caffeineMg: weekIntakes.reduce((sum, i) => sum + i.caffeine, 0),
+        });
+
+        currentWeekStart = currentWeekStart.add(1, 'week');
+        weekNum++;
+      }
+
+      const currentTotals = {
+        cups: currentIntakes.length,
+        caffeine: currentIntakes.reduce((sum, i) => sum + i.caffeine, 0),
+      };
+
+      const previousTotals = {
+        cups: previousIntakes.length,
+        caffeine: previousIntakes.reduce((sum, i) => sum + i.caffeine, 0),
+      };
+
+      return {
+        weeks,
+        comparison: {
+          cups: this.calculateComparison(
+            currentTotals.cups,
+            previousTotals.cups,
+          ),
+          caffeine: this.calculateComparison(
+            currentTotals.caffeine,
+            previousTotals.caffeine,
+          ),
+        },
+      };
     });
+  }
+
+  private getLogicalMonthRange(date: dayjs.Dayjs): {
+    start: dayjs.Dayjs;
+    end: dayjs.Dayjs;
+  } {
+    const firstDayOfMonth = date.startOf('month');
+    const lastDayOfMonth = date.endOf('month');
+
+    let firstThursday = firstDayOfMonth;
+    while (firstThursday.isoWeekday() !== 4) {
+      firstThursday = firstThursday.add(1, 'day');
+    }
+
+    let lastThursday = lastDayOfMonth;
+    while (lastThursday.isoWeekday() !== 4) {
+      lastThursday = lastThursday.subtract(1, 'day');
+    }
+
+    return {
+      start: firstThursday.startOf('isoWeek'),
+      end: lastThursday.endOf('isoWeek'),
+    };
+  }
+
+  private calculateComparison(current: number, previous: number) {
+    const diff = Math.abs(current - previous);
+    let trend: 'higher' | 'lower' | 'equal' = 'equal';
+
+    if (current > previous) trend = 'higher';
+    else if (current < previous) trend = 'lower';
+
+    return {
+      currentMonth: current,
+      previousMonth: previous,
+      diff,
+      trend,
+    };
   }
   async getMonthlyView(
     userId: string,
@@ -308,10 +437,6 @@ export class CaffeineService {
 
   private formatDateForDb(date: Date | dayjs.Dayjs): string {
     return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
-  }
-
-  private formatDateShort(date: Date | dayjs.Dayjs): string {
-    return dayjs(date).format('MM.DD');
   }
 
   async updateBrandRanking(
