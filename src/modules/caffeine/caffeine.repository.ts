@@ -3,7 +3,11 @@ import { BaseRepository } from '../../common/database/base.repository';
 import { MysqlService } from '../../providers/mysql/mysql.service';
 import { QueryRunner } from 'typeorm';
 import { CaffeineMonthlyDetailRow } from './dto/caffeine-calendar.dto';
-import { TodayConsumptionRow, WeeklyCupsRow } from './dto/caffeine-stats.dto';
+import {
+  TodayConsumptionRow,
+  WeeklyCupsRow,
+  CaffeineIntakeRangeRow,
+} from './dto/caffeine-stats.dto';
 
 export interface CaffeineInsertData {
   user_id: string;
@@ -157,6 +161,27 @@ export class CaffeineRepository extends BaseRepository {
     ]);
   }
 
+  async findIntakesInRange(
+    userId: string,
+    start: string,
+    end: string,
+  ): Promise<CaffeineIntakeRangeRow[]> {
+    const query = `
+      SELECT id, caffeine, created_at
+      FROM caffeine_intake
+      WHERE user_id = ?
+        AND created_at >= ?
+        AND created_at <= ?
+        AND deleted_at IS NULL
+      ORDER BY created_at ASC
+    `;
+    return await this.mysql.query<CaffeineIntakeRangeRow>(query, [
+      userId,
+      start,
+      end,
+    ]);
+  }
+
   async softDeleteIntake(
     intakeId: number,
     queryRunner?: QueryRunner,
@@ -177,7 +202,12 @@ export class CaffeineRepository extends BaseRepository {
     return this.mysql.getQueryRunner();
   }
 
-  async findById(id: number): Promise<{ user_id: string; caffeine: number; brand_id: number; created_at: Date } | null> {
+  async findById(id: number): Promise<{
+    user_id: string;
+    caffeine: number;
+    brand_id: number;
+    created_at: Date;
+  } | null> {
     const query = `
       SELECT user_id, caffeine, brand_id, created_at
       FROM caffeine_intake 
