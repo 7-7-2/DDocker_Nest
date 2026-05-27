@@ -242,7 +242,6 @@ export class CaffeineService {
     const cacheKey = `caffeine:stats:chart:${userId}:${dayKey}`;
 
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
-      const dayRanges = this.getRollingDayRanges(anchor);
       const weekRanges = this.getRollingWeekRanges(anchor);
       const monthRanges = this.getRollingMonthRanges(anchor);
 
@@ -256,7 +255,6 @@ export class CaffeineService {
       );
 
       return {
-        days: this.aggregatePeriodicStats(dayRanges, intakes, 'MM.DD'),
         weeks: this.aggregatePeriodicStats(
           weekRanges,
           intakes,
@@ -265,18 +263,6 @@ export class CaffeineService {
         months: this.aggregatePeriodicStats(monthRanges, intakes, 'YYYY.MM'),
       };
     });
-  }
-
-  private getRollingDayRanges(anchor: dayjs.Dayjs) {
-    const ranges: { start: dayjs.Dayjs; end: dayjs.Dayjs }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const day = anchor.subtract(i, 'day');
-      ranges.push({
-        start: day.startOf('day'),
-        end: day.endOf('day'),
-      });
-    }
-    return ranges;
   }
 
   private getRollingWeekRanges(anchor: dayjs.Dayjs) {
