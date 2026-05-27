@@ -21,7 +21,8 @@ import {
   TodayCaffeineItemDto,
   TodayCaffeineResponseDto,
   MonthlyStatsResponseDto,
-  MonthlyWeekTrendDto,
+  PeriodicStatsItemDto,
+  CaffeineIntakeRangeRow,
 } from './dto/caffeine-stats.dto';
 
 import { RedisService } from '../../providers/redis/redis.service';
@@ -173,24 +174,12 @@ export class CaffeineService {
       : dayjs.utc().add(9, 'hour');
 
     const calendarMonthKey = targetDate.format('YYYY-MM');
-
-    const refThursday = targetDate.startOf('isoWeek').add(3, 'day');
-    const logicalMonthKey = refThursday.format('YYYY-MM');
-
-    const currentRange = this.getLogicalMonthRange(
-      refThursday.startOf('month'),
-    );
-    const nextLogicalMonthRef = currentRange.end.add(1, 'day');
-    const nextRefThursday = nextLogicalMonthRef
-      .startOf('isoWeek')
-      .add(3, 'day');
-    const nextLogicalMonthKey = nextRefThursday.format('YYYY-MM');
+    const dayKey = targetDate.format('YYYY-MM-DD');
 
     const keys = [
       `caffeine:today:${userId}`,
       `caffeine:monthly:${userId}:${calendarMonthKey}`,
-      `caffeine:monthly_stats:${userId}:${logicalMonthKey}`,
-      `caffeine:monthly_stats:${userId}:${nextLogicalMonthKey}`,
+      `caffeine:stats:chart:${userId}:${dayKey}`,
       `user:profile:${userId}`,
       `user:stats:${userId}`,
     ];
@@ -245,144 +234,110 @@ export class CaffeineService {
     userId: string,
     dateStr?: string,
   ): Promise<MonthlyStatsResponseDto> {
-    const inputDate = dateStr
+    const anchor = dateStr
       ? dayjs.utc(dateStr).add(9, 'hour')
       : dayjs.utc().add(9, 'hour');
 
-    const refThursday = inputDate.startOf('isoWeek').add(3, 'day');
-    const logicalMonthDate = refThursday.startOf('month');
-    const monthKey = logicalMonthDate.format('YYYY-MM');
-    const cacheKey = `caffeine:monthly_stats:${userId}:${monthKey}`;
+    const dayKey = anchor.format('YYYY-MM-DD');
+    const cacheKey = `caffeine:stats:chart:${userId}:${dayKey}`;
 
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
-      const currentRange = this.getLogicalMonthRange(logicalMonthDate);
+      const dayRanges = this.getRollingDayRanges(anchor);
+      const weekRanges = this.getRollingWeekRanges(anchor);
+      const monthRanges = this.getRollingMonthRanges(anchor);
 
-      const previousLogicalMonthRef = currentRange.start.subtract(1, 'day');
-      const previousRefThursday = previousLogicalMonthRef
-        .startOf('isoWeek')
-        .add(3, 'day');
-      const previousLogicalMonthDate = previousRefThursday.startOf('month');
+      const globalStart = monthRanges[0].start;
+      const globalEnd = anchor.endOf('day');
 
-      const previousRange = this.getLogicalMonthRange(previousLogicalMonthDate);
-
-      const [currentIntakes, previousIntakes] = await Promise.all([
-        this.caffeineRepository.findIntakesInRange(
-          userId,
-          this.formatDateForDb(currentRange.start),
-          this.formatDateForDb(currentRange.end),
-        ),
-        this.caffeineRepository.findIntakesInRange(
-          userId,
-          this.formatDateForDb(previousRange.start),
-          this.formatDateForDb(previousRange.end),
-        ),
-      ]);
-
-      if (currentIntakes.length === 0) {
-        return {
-          weeks: [],
-          comparison: {
-            cups: this.calculateComparison(0, previousIntakes.length),
-            caffeine: this.calculateComparison(
-              0,
-              previousIntakes.reduce((sum, i) => sum + i.caffeine, 0),
-            ),
-          },
-        };
-      }
-
-      const weeks: MonthlyWeekTrendDto[] = [];
-      let currentWeekStart = currentRange.start;
-      let weekNum = 1;
-
-      while (
-        currentWeekStart.isBefore(currentRange.end) ||
-        currentWeekStart.isSame(currentRange.end, 'day')
-      ) {
-        const currentWeekEnd = currentWeekStart.endOf('isoWeek');
-        const weekIntakes = currentIntakes.filter((i) => {
-          const intakeDate = dayjs(i.created_at);
-          return (
-            (intakeDate.isAfter(currentWeekStart) ||
-              intakeDate.isSame(currentWeekStart)) &&
-            (intakeDate.isBefore(currentWeekEnd) ||
-              intakeDate.isSame(currentWeekEnd))
-          );
-        });
-
-        weeks.push({
-          weekNum,
-          cups: weekIntakes.length,
-          caffeineMg: weekIntakes.reduce((sum, i) => sum + i.caffeine, 0),
-        });
-
-        currentWeekStart = currentWeekStart.add(1, 'week');
-        weekNum++;
-      }
-
-      const currentTotals = {
-        cups: currentIntakes.length,
-        caffeine: currentIntakes.reduce((sum, i) => sum + i.caffeine, 0),
-      };
-
-      const previousTotals = {
-        cups: previousIntakes.length,
-        caffeine: previousIntakes.reduce((sum, i) => sum + i.caffeine, 0),
-      };
+      const intakes = await this.caffeineRepository.findIntakesInRange(
+        userId,
+        this.formatDateForDb(globalStart),
+        this.formatDateForDb(globalEnd),
+      );
 
       return {
-        weeks,
-        comparison: {
-          cups: this.calculateComparison(
-            currentTotals.cups,
-            previousTotals.cups,
-          ),
-          caffeine: this.calculateComparison(
-            currentTotals.caffeine,
-            previousTotals.caffeine,
-          ),
-        },
+        days: this.aggregatePeriodicStats(dayRanges, intakes, 'MM.DD'),
+        weeks: this.aggregatePeriodicStats(
+          weekRanges,
+          intakes,
+          'MM.DD - MM.DD',
+        ),
+        months: this.aggregatePeriodicStats(monthRanges, intakes, 'YYYY.MM'),
       };
     });
   }
 
-  private getLogicalMonthRange(date: dayjs.Dayjs): {
-    start: dayjs.Dayjs;
-    end: dayjs.Dayjs;
-  } {
-    const firstDayOfMonth = date.startOf('month');
-    const lastDayOfMonth = date.endOf('month');
-
-    let firstThursday = firstDayOfMonth;
-    while (firstThursday.isoWeekday() !== 4) {
-      firstThursday = firstThursday.add(1, 'day');
+  private getRollingDayRanges(anchor: dayjs.Dayjs) {
+    const ranges: { start: dayjs.Dayjs; end: dayjs.Dayjs }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = anchor.subtract(i, 'day');
+      ranges.push({
+        start: day.startOf('day'),
+        end: day.endOf('day'),
+      });
     }
-
-    let lastThursday = lastDayOfMonth;
-    while (lastThursday.isoWeekday() !== 4) {
-      lastThursday = lastThursday.subtract(1, 'day');
-    }
-
-    return {
-      start: firstThursday.startOf('isoWeek'),
-      end: lastThursday.endOf('isoWeek'),
-    };
+    return ranges;
   }
 
-  private calculateComparison(current: number, previous: number) {
-    const diff = Math.abs(current - previous);
-    let trend: 'higher' | 'lower' | 'equal' = 'equal';
+  private getRollingWeekRanges(anchor: dayjs.Dayjs) {
+    const ranges: { start: dayjs.Dayjs; end: dayjs.Dayjs }[] = [];
+    const thisWeekStart = anchor.startOf('isoWeek');
+    const thisWeekEnd = anchor.endOf('isoWeek');
 
-    if (current > previous) trend = 'higher';
-    else if (current < previous) trend = 'lower';
-
-    return {
-      currentMonth: current,
-      previousMonth: previous,
-      diff,
-      trend,
-    };
+    for (let i = 6; i >= 1; i--) {
+      const weekStart = thisWeekStart.subtract(i, 'week');
+      ranges.push({
+        start: weekStart,
+        end: weekStart.endOf('isoWeek'),
+      });
+    }
+    ranges.push({ start: thisWeekStart, end: thisWeekEnd });
+    return ranges;
   }
+
+  private getRollingMonthRanges(anchor: dayjs.Dayjs) {
+    const ranges: { start: dayjs.Dayjs; end: dayjs.Dayjs }[] = [];
+    const thisMonthStart = anchor.startOf('month');
+
+    for (let i = 6; i >= 0; i--) {
+      const monthStart = thisMonthStart.subtract(i, 'month');
+      ranges.push({
+        start: monthStart,
+        end: monthStart.endOf('month'),
+      });
+    }
+    return ranges;
+  }
+
+  private aggregatePeriodicStats(
+    ranges: { start: dayjs.Dayjs; end: dayjs.Dayjs }[],
+    intakes: CaffeineIntakeRangeRow[],
+    format: string,
+  ): PeriodicStatsItemDto[] {
+    return ranges.map((range) => {
+      const periodIntakes = intakes.filter((intake) => {
+        const d = dayjs(intake.created_at);
+        return (
+          (d.isAfter(range.start) || d.isSame(range.start)) &&
+          (d.isBefore(range.end) || d.isSame(range.end))
+        );
+      });
+
+      let label = '';
+      if (format === 'MM.DD - MM.DD') {
+        label = `${range.start.format('MM.DD')} - ${range.end.format('MM.DD')}`;
+      } else {
+        label = range.start.format(format);
+      }
+
+      return {
+        label,
+        cups: periodIntakes.length,
+        caffeineMg: periodIntakes.reduce((sum, i) => sum + i.caffeine, 0),
+      };
+    });
+  }
+
   async getMonthlyView(
     userId: string,
     dateStr: string,
