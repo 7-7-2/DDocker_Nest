@@ -38,9 +38,6 @@ export class PeriodicStatsItemDto {
 
 export class MonthlyStatsResponseDto {
   @ApiProperty({ type: [PeriodicStatsItemDto] })
-  days: PeriodicStatsItemDto[];
-
-  @ApiProperty({ type: [PeriodicStatsItemDto] })
   weeks: PeriodicStatsItemDto[];
 
   @ApiProperty({ type: [PeriodicStatsItemDto] })
