@@ -2,6 +2,8 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { BrandRepository, BrandMenuResponse } from './brand.repository';
+import { RedisService } from '../../providers/redis/redis.service';
+import { PopularProductDto } from './dto/popular-product.dto';
 
 @Injectable()
 export class BrandService {
@@ -14,6 +16,7 @@ export class BrandService {
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly brandRepository: BrandRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async resolveBrandId(identifier: string | number): Promise<number | null> {
@@ -97,5 +100,28 @@ export class BrandService {
     this.logger.log('Manually refreshing brand cache...');
     const data = await this.brandRepository.getAggregatedBrandData();
     await this.cacheManager.set(this.BRAND_CACHE_KEY, data, this.CACHE_TTL);
+  }
+
+  async getPopularProducts(
+    brandIdentifier: string,
+  ): Promise<PopularProductDto[]> {
+    try {
+      const brandId = await this.resolveBrandId(brandIdentifier);
+      if (!brandId) return [];
+
+      const cacheKey = `brand:popular:${brandId}`;
+      const TTL_24H = 86400; // 24 hours in seconds
+
+      return await this.redisService.getOrSet(cacheKey, TTL_24H, async () => {
+        this.logger.log(`Fetching ranked products for brand ${brandId} from DB`);
+        return await this.brandRepository.findRankedProducts(brandId, 3);
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch popular products for brand: ${brandIdentifier}`,
+        error.stack,
+      );
+      return [];
+    }
   }
 }

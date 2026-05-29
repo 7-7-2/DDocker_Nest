@@ -40,4 +40,25 @@ export class BrandRepository {
     const query = 'SELECT id, brand_name FROM brand';
     return await this.mysqlService.query<BrandRow>(query);
   }
+
+  async findRankedProducts(
+    brandId: number,
+    limit: number = 3,
+  ): Promise<{ productName: string; caffeine: number }[]> {
+    const query = `
+      SELECT 
+        p.name as productName, 
+        p.caffeine
+      FROM caffeine_intake i
+      INNER JOIN product p ON i.brand_id = p.brand_id AND i.product_name = p.name
+      WHERE i.brand_id = ? 
+        AND i.deleted_at IS NULL
+        AND i.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY p.name, p.caffeine
+      ORDER BY COUNT(i.id) DESC, p.caffeine DESC
+      LIMIT ?
+    `;
+
+    return await this.mysqlService.query(query, [brandId, limit]);
+  }
 }
