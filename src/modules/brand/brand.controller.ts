@@ -5,11 +5,13 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Query,
 } from '@nestjs/common';
 import { BrandService } from './brand.service';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { BrandMenuResponse } from './brand.repository';
 import { PopularProductDto } from './dto/popular-product.dto';
+import { ComparisonResponseDto } from './dto/comparison-response.dto';
 
 @ApiTags('Brand')
 @Controller('brand')
@@ -24,6 +26,23 @@ export class BrandController {
   })
   async findAll(): Promise<BrandMenuResponse> {
     return await this.brandService.getBrandData();
+  }
+
+  @Get('comparison')
+  @ApiOperation({ summary: '타 브랜드의 유사 메뉴 카페인 비교' })
+  @ApiResponse({
+    status: 200,
+    type: ComparisonResponseDto,
+    description: 'Comparison data for similar products across brands',
+  })
+  async getComparison(
+    @Query('brandName') brandName: string,
+    @Query('productName') productName: string,
+  ): Promise<ComparisonResponseDto> {
+    return await this.brandService.fetchCaffeineComparison(
+      brandName,
+      productName,
+    );
   }
 
   @Get(':brandName/popular')

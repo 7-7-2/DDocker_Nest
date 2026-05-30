@@ -27,7 +27,9 @@ export default registerAs(
     dateStrings: false,
     extra: {
       typeCast: (field, next) => {
-        if (field.type === 'JSON') return JSON.parse(field.string());
+        if (field.type === 'JSON' || field.name === 'coffee_menus') {
+          return JSON.parse(field.string('utf8'));
+        }
         return next();
       },
       connectionLimit:
