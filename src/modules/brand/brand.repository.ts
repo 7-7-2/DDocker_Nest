@@ -6,6 +6,7 @@ export interface BrandMenuItem {
   brand: string;
   caffeine: number;
   menu: string;
+  type: string;
 }
 
 export type BrandMenuResponse = Record<string, BrandMenuItem[]>;
@@ -23,7 +24,7 @@ export class BrandRepository {
       SELECT JSON_OBJECTAGG(brand_name, brand_items) AS coffee_menus
       FROM (
           SELECT b.brand_name, JSON_ARRAYAGG(
-              JSON_OBJECT('brand', b.brand_name, 'caffeine', p.caffeine, 'menu', p.name)
+              JSON_OBJECT('brand', b.brand_name, 'caffeine', p.caffeine, 'menu', p.name, 'type', p.type)
           ) AS brand_items
           FROM brand b
           INNER JOIN product p ON b.id = p.brand_id
@@ -60,5 +61,21 @@ export class BrandRepository {
     `;
 
     return await this.mysqlService.query(query, [brandId, limit]);
+  }
+
+  async findComparisonList(
+    type: string,
+  ): Promise<{ brandName: string; productName: string; caffeine: number }[]> {
+    const query = `
+      SELECT 
+        b.brand_name as brandName,
+        p.name as productName,
+        p.caffeine
+      FROM product p
+      INNER JOIN brand b ON p.brand_id = b.id
+      WHERE p.type = ?
+    `;
+
+    return await this.mysqlService.query(query, [type]);
   }
 }
