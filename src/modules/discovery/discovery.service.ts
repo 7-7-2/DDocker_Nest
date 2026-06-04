@@ -33,11 +33,19 @@ export class DiscoveryService {
     const weeklyKey = `brand:ranking:weekly:${fakeKSTNow.format('GGGG-WW')}`;
     const allKey = 'brand:ranking:all';
 
-    const ranking = await this.redisService.zrevrangeWithScores(weeklyKey, 0, 4);
+    const ranking = await this.redisService.zrevrangeWithScores(
+      weeklyKey,
+      0,
+      4,
+    );
     const existingIds = new Set(ranking.map((r) => parseInt(r.value, 10)));
 
     if (ranking.length < 5) {
-      const allTime = await this.redisService.zrevrangeWithScores(allKey, 0, 10);
+      const allTime = await this.redisService.zrevrangeWithScores(
+        allKey,
+        0,
+        10,
+      );
       for (const item of allTime) {
         const id = parseInt(item.value, 10);
         if (!existingIds.has(id)) {

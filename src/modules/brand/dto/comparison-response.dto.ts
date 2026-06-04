@@ -10,7 +10,10 @@ export class ComparisonItemDto {
   @ApiProperty({ example: 200 })
   caffeine: number;
 
-  @ApiProperty({ example: 50, description: 'Caffeine difference relative to source' })
+  @ApiProperty({
+    example: 50,
+    description: 'Caffeine difference relative to source',
+  })
   diff: number;
 }
 

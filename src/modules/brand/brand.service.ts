@@ -56,7 +56,7 @@ export class BrandService {
       nameMap = maps.nameMap;
     }
 
-    return (nameMap[id] as string) || null;
+    return nameMap[Number(id)] || null;
   }
 
   async refreshBrandMaps(): Promise<{

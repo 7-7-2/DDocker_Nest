@@ -7,6 +7,7 @@ import { UserService } from '../user/user.service';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { NotificationRow } from './entities/notification.entity';
+import { NotificationResponseDto } from './dto/notification-payload.dto';
 
 import * as dayjs from 'dayjs';
 import * as utc from 'dayjs/plugin/utc';
@@ -48,27 +49,31 @@ export class NotificationConsumer implements OnApplicationBootstrap {
     await this.setupStream();
 
     // Start background processing
-    setImmediate(async () => {
-      await this.claimOrphanedMessages();
-      await this.processPendingMessages();
+    setImmediate(() => {
+      this.claimOrphanedMessages().catch((err: Error) => {
+        this.logger.warn(`Orphaned message claim failed: ${err.message}`);
+      });
+      this.processPendingMessages().catch((err: Error) => {
+        this.logger.warn(`Pending message processing failed: ${err.message}`);
+      });
       this.logger.log('Starting Redis Stream polling loop...');
-      this.pollStream().catch((err) => {
+      this.pollStream().catch((err: Error) => {
         this.logger.error('Fatal error in polling loop', err);
       });
     });
   }
 
-  //In case write to DB failed
+  // In case write to DB failed
   private async claimOrphanedMessages() {
     this.logger.log('Checking for orphaned messages in PEL...');
     try {
-      const pendingInfo = await this.redisStreamService.xpending(
+      const pendingInfo = (await this.redisStreamService.xpending(
         this.STREAM_NAME,
         this.GROUP_NAME,
         '-',
         '+',
         10,
-      );
+      )) as [string, string, number, number][];
 
       if (pendingInfo && pendingInfo.length > 0) {
         const idsToClaim = pendingInfo
@@ -87,23 +92,25 @@ export class NotificationConsumer implements OnApplicationBootstrap {
         }
       }
     } catch (error) {
-      this.logger.warn('Failed to claim orphaned messages (non-fatal)');
+      this.logger.warn(
+        `Failed to claim orphaned messages (non-fatal): ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
     }
   }
 
-  private async processPendingMessages() {
+  async processPendingMessages() {
     this.logger.log('Checking for all pending messages in PEL...');
     try {
-      const results = await this.redisStreamService.xreadgroup(
+      const results = (await this.redisStreamService.xreadgroup(
         this.GROUP_NAME,
         this.CONSUMER_NAME,
         this.STREAM_NAME,
         10,
         0,
-      );
+      )) as [string, [string, string[]][]][] | null;
 
-      if (results && results?.length > 0) {
-        const [_stream, messages] = results[0];
+      if (results && results.length > 0) {
+        const messages = results[0][1];
         this.logger.log(
           `Found ${messages.length} pending messages for [${this.CONSUMER_NAME}]. Processing...`,
         );
@@ -112,7 +119,9 @@ export class NotificationConsumer implements OnApplicationBootstrap {
         }
       }
     } catch (error) {
-      this.logger.error('Error processing pending messages', error);
+      this.logger.error(
+        `Error processing pending messages: ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
     }
   }
 
@@ -126,7 +135,9 @@ export class NotificationConsumer implements OnApplicationBootstrap {
       );
       this.logger.log(`Redis Stream Group "${this.GROUP_NAME}" is ready.`);
     } catch (error) {
-      this.logger.warn(`Potential issue during xgroup setup: ${error}`);
+      this.logger.warn(
+        `Potential issue during xgroup setup: ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
     }
   }
 
@@ -136,23 +147,25 @@ export class NotificationConsumer implements OnApplicationBootstrap {
         this.logger.debug(
           `Polling stream ${this.STREAM_NAME} group ${this.GROUP_NAME}...`,
         );
-        const results = await this.redisStreamService.xreadgroup(
+        const results = (await this.redisStreamService.xreadgroup(
           this.GROUP_NAME,
           this.CONSUMER_NAME,
           this.STREAM_NAME,
           1,
           2000,
-        );
+        )) as [string, [string, string[]][]][] | null;
 
         if (results && results.length > 0) {
-          const [_stream, messages] = results[0];
+          const messages = results[0][1];
           this.logger.log(`Received ${messages.length} messages from stream.`);
           for (const [id, fields] of messages) {
             await this.processMessage(id, fields);
           }
         }
       } catch (error) {
-        this.logger.error('Error polling Redis Stream', error);
+        this.logger.error(
+          `Error polling Redis Stream: ${error instanceof Error ? error.message : 'Unknown'}`,
+        );
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
 
@@ -160,12 +173,16 @@ export class NotificationConsumer implements OnApplicationBootstrap {
     }
   }
 
-  private async processMessage(msgId: string, fields: string[]) {
+  async processMessage(msgId: string, fields: string[]) {
     this.logger.log(`Processing message ${msgId}...`);
     try {
       const data: Record<string, string> = {};
       for (let i = 0; i < fields.length; i += 2) {
-        data[fields[i]] = fields[i + 1];
+        const key = fields[i];
+        const value = fields[i + 1];
+        if (key && value) {
+          data[key] = value;
+        }
       }
 
       const { receiverId, senderId, senderNickname, type, postId } = data;
@@ -176,7 +193,7 @@ export class NotificationConsumer implements OnApplicationBootstrap {
         receiverId,
         senderId,
         senderNickname,
-        type: type as any,
+        type: type as NotificationRow['type'],
         postId,
         timestamp,
       };
@@ -190,12 +207,15 @@ export class NotificationConsumer implements OnApplicationBootstrap {
           }),
         );
       } catch (error) {
-        if (error.name === 'ConditionalCheckFailedException') {
+        const dynamoError = error as { name?: string; message?: string };
+        if (dynamoError.name === 'ConditionalCheckFailedException') {
           this.logger.warn(
             `Notification ${msgId} already exists in DynamoDB. Skipping save.`,
           );
         } else {
-          this.logger.error(`DynamoDB Error for ${msgId}: ${error.message}`);
+          this.logger.error(
+            `DynamoDB Error for ${msgId}: ${dynamoError.message ?? 'Unknown'}`,
+          );
           throw error;
         }
       }
@@ -205,14 +225,14 @@ export class NotificationConsumer implements OnApplicationBootstrap {
         ? dayjs(lastRead).subtract(9, 'hour').toISOString()
         : dayjs(new Date()).subtract(9, 'hour').toISOString();
 
-      const signalPayload = {
+      const signalPayload: NotificationResponseDto = {
         notificationId: notification.notificationId,
-        receiverId: notification.receiverId,
+        type: notification.type as NotificationResponseDto['type'],
         senderId: notification.senderId,
         senderNickname: notification.senderNickname,
-        type: notification.type,
         postId: notification.postId,
         time: notification.timestamp,
+        timestamp: notification.timestamp,
         isRead: notification.timestamp <= lastReadAt,
       };
 

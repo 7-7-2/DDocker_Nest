@@ -102,6 +102,9 @@
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test-utils/jest.setup.ts"
+    ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }
