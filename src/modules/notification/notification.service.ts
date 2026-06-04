@@ -98,7 +98,7 @@ export class NotificationService {
     });
 
     const result = await this.dynamoDbService.db.send(command);
-    const items = (result.Items as NotificationRow[]) || [];
+    const items = (result.Items as unknown as NotificationRow[]) || [];
 
     return {
       items: items.map((item) => ({
@@ -112,7 +112,7 @@ export class NotificationService {
         isRead: item.timestamp <= lastReadAt,
       })),
       nextCursor: result.LastEvaluatedKey
-        ? result.LastEvaluatedKey.timestamp
+        ? (result.LastEvaluatedKey.timestamp as string)
         : undefined,
       lastReadAt,
     };

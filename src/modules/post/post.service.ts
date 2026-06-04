@@ -153,7 +153,11 @@ export class PostService {
         `user:profile:${userId}`,
       ]);
 
-      await this.caffeineService.updateBrandRanking(post.brand_id, -1, post.created_at);
+      await this.caffeineService.updateBrandRanking(
+        post.brand_id,
+        -1,
+        post.created_at,
+      );
 
       this.logger.log(`Post ${postId} deleted for user ${userId}`);
     } catch (error) {

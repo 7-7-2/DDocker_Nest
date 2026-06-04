@@ -26,7 +26,7 @@ export default registerAs(
     timezone: 'Z',
     dateStrings: false,
     extra: {
-      typeCast: (field, next) => {
+      typeCast: (field: any, next: () => void) => {
         if (field.type === 'JSON' || field.name === 'coffee_menus') {
           return JSON.parse(field.string('utf8'));
         }
