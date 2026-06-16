@@ -174,4 +174,46 @@ describe('CaffeineService', () => {
       expect(result.items).toHaveLength(2);
     });
   });
+
+  describe('getIntakeTrend', () => {
+    it('should aggregate chart, metrics, threshold, and ranking correctly (Weekly)', async () => {
+      const dateStr = '2026-05-02'; // Saturday
+      const intakes = [
+        {
+          id: 1,
+          caffeine: 450,
+          created_at: new Date('2026-05-01T10:00:00Z'),
+          brand_id: 1,
+          brand_name: 'Starbucks',
+        },
+        {
+          id: 2,
+          caffeine: 150,
+          created_at: new Date('2026-05-02T10:00:00Z'),
+          brand_id: 1,
+          brand_name: 'Starbucks',
+        },
+        {
+          id: 3,
+          caffeine: 200,
+          created_at: new Date('2026-05-02T14:00:00Z'),
+          brand_id: 2,
+          brand_name: 'Mega',
+        },
+      ];
+      caffeineRepository.findDetailedIntakesInRange!.mockResolvedValue(intakes);
+
+      const result = await service.getIntakeTrend('user-1', dateStr, 'weekly');
+
+      expect(result.metrics.sum).toBe(3); // Total cups
+      expect(result.metrics.totalDays).toBe(2); // May 1, May 2
+      expect(result.threshold.excessiveCount).toBe(1); // May 1 (450mg)
+      expect(result.threshold.moderateCount).toBe(1); // May 2 (150+200=350mg)
+      expect(result.ranking[0].brand).toBe('Starbucks');
+      expect(result.ranking[0].cups).toBe(2);
+      expect(result.ranking[1].brand).toBe('Mega');
+      expect(result.ranking[1].cups).toBe(1);
+      expect(result.chart).toHaveLength(6); // current + 5 prev
+    });
+  });
 });

@@ -24,6 +24,7 @@ import {
   PeriodicStatsItemDto,
   CaffeineIntakeRangeRow,
 } from './dto/caffeine-stats.dto';
+import { IntakeTrendResponseDto } from './dto/intake-trend.dto';
 
 import { RedisService } from '../../providers/redis/redis.service';
 import { PostService } from '../post/post.service';
@@ -211,6 +212,98 @@ export class CaffeineService {
     });
   }
 
+  //TODO: split with helper funcs
+  async getIntakeTrend(
+    userId: string,
+    dateStr: string,
+    unit: 'weekly' | 'monthly',
+  ): Promise<IntakeTrendResponseDto> {
+    const anchor = dayjs.utc(dateStr).add(9, 'hour');
+    const dayKey = anchor.format('YYYY-MM-DD');
+    const cacheKey = `caffeine:analysis:${userId}:${unit}:${dayKey}`;
+
+    return await this.redisService.getOrSet(cacheKey, 3600, async () => {
+      const ranges =
+        unit === 'weekly'
+          ? this.getRollingWeekRanges(anchor)
+          : this.getRollingMonthRanges(anchor);
+
+      const globalStart = ranges[0].start;
+      const globalEnd = anchor.endOf(unit === 'weekly' ? 'isoWeek' : 'month');
+
+      const intakes = await this.caffeineRepository.findDetailedIntakesInRange(
+        userId,
+        this.formatDateForDb(globalStart),
+        this.formatDateForDb(globalEnd),
+      );
+
+      const chart = this.aggregatePeriodicStats(
+        ranges,
+        intakes,
+        unit === 'weekly' ? 'MM.DD - MM.DD' : 'YYYY.MM',
+      );
+
+      const currentRange = ranges[ranges.length - 1];
+      const currentIntakes = intakes.filter((i) => {
+        const d = dayjs(i.created_at);
+        return (
+          (d.isAfter(currentRange.start) || d.isSame(currentRange.start)) &&
+          (d.isBefore(currentRange.end) || d.isSame(currentRange.end))
+        );
+      });
+
+      const dailySumMap: Record<string, number> = {};
+      const brandMap: Record<
+        string,
+        { brand: string; cups: number; caffeine: number }
+      > = {};
+
+      currentIntakes.forEach((i) => {
+        const day = dayjs(i.created_at).format('YYYY-MM-DD');
+        dailySumMap[day] = (dailySumMap[day] || 0) + i.caffeine;
+
+        if (!brandMap[i.brand_name]) {
+          brandMap[i.brand_name] = {
+            brand: i.brand_name,
+            cups: 0,
+            caffeine: 0,
+          };
+        }
+        brandMap[i.brand_name].cups++;
+        brandMap[i.brand_name].caffeine += i.caffeine;
+      });
+
+      let excessiveCount = 0;
+      let moderateCount = 0;
+      Object.values(dailySumMap).forEach((dayCaffeine) => {
+        if (dayCaffeine >= 400) excessiveCount++;
+        else if (dayCaffeine > 0) moderateCount++;
+      });
+
+      const ranking = Object.values(brandMap)
+        .sort((a, b) => b.cups - a.cups || b.caffeine - a.caffeine)
+        .slice(0, 5);
+
+      const totalCups = currentIntakes.length;
+      const daysInPeriod = unit === 'weekly' ? 7 : anchor.daysInMonth();
+      const dailyAverage = Number((totalCups / daysInPeriod).toFixed(1));
+
+      return {
+        metrics: {
+          dailyAverage,
+          sum: totalCups,
+          totalDays: Object.keys(dailySumMap).length,
+        },
+        chart,
+        threshold: {
+          excessiveCount,
+          moderateCount,
+        },
+        ranking,
+      };
+    });
+  }
+
   private parseItems(items: unknown): TodayCaffeineItemDto[] {
     if (!items) return [];
 
@@ -270,7 +363,7 @@ export class CaffeineService {
     const thisWeekStart = anchor.startOf('isoWeek');
     const thisWeekEnd = anchor.endOf('isoWeek');
 
-    for (let i = 6; i >= 1; i--) {
+    for (let i = 5; i >= 1; i--) {
       const weekStart = thisWeekStart.subtract(i, 'week');
       ranges.push({
         start: weekStart,
@@ -285,7 +378,7 @@ export class CaffeineService {
     const ranges: { start: dayjs.Dayjs; end: dayjs.Dayjs }[] = [];
     const thisMonthStart = anchor.startOf('month');
 
-    for (let i = 6; i >= 0; i--) {
+    for (let i = 5; i >= 0; i--) {
       const monthStart = thisMonthStart.subtract(i, 'month');
       ranges.push({
         start: monthStart,
