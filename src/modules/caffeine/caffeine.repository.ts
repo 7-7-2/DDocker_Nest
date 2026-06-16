@@ -5,7 +5,6 @@ import { QueryRunner } from 'typeorm';
 import { CaffeineMonthlyDetailRow } from './dto/caffeine-calendar.dto';
 import {
   TodayConsumptionRow,
-  WeeklyCupsRow,
   CaffeineIntakeRangeRow,
 } from './dto/caffeine-stats.dto';
 
@@ -110,27 +109,6 @@ export class CaffeineRepository extends BaseRepository {
     return results[0] || null;
   }
 
-  async findWeeklyCupStats(
-    userId: string,
-    rangeStart: string,
-  ): Promise<WeeklyCupsRow[]> {
-    const query = `
-      SELECT 
-        YEARWEEK(created_at, 1) as week_key,
-        COUNT(*) as cups,
-        MIN(DATE(created_at)) as week_start,
-        MAX(DATE(created_at)) as week_end
-      FROM caffeine_intake
-      WHERE user_id = ?
-        AND created_at >= ?
-        AND deleted_at IS NULL
-      GROUP BY week_key
-      ORDER BY week_key DESC
-      LIMIT 6
-    `;
-    return await this.mysql.query<WeeklyCupsRow>(query, [userId, rangeStart]);
-  }
-
   async findMonthlyDetails(
     userId: string,
     start: string,
@@ -155,27 +133,6 @@ export class CaffeineRepository extends BaseRepository {
       ORDER BY i.created_at ASC
     `;
     return await this.mysql.query<CaffeineMonthlyDetailRow>(query, [
-      userId,
-      start,
-      end,
-    ]);
-  }
-
-  async findIntakesInRange(
-    userId: string,
-    start: string,
-    end: string,
-  ): Promise<CaffeineIntakeRangeRow[]> {
-    const query = `
-      SELECT id, caffeine, created_at
-      FROM caffeine_intake
-      WHERE user_id = ?
-        AND created_at >= ?
-        AND created_at <= ?
-        AND deleted_at IS NULL
-      ORDER BY created_at ASC
-    `;
-    return await this.mysql.query<CaffeineIntakeRangeRow>(query, [
       userId,
       start,
       end,

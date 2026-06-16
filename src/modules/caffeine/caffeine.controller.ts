@@ -76,19 +76,6 @@ export class CaffeineController {
     return await this.caffeineService.getIntakeTrend(userId, date, unit);
   }
 
-  /* deprecated
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Get('trend')
-  @ApiOperation({ summary: '기간별 섭취 동향 (기간 단위별 이전 6개 기간)' })
-  @ApiResponse({ status: 200, type: MonthlyStatsResponseDto })
-  async getMonthlyTrend(
-    @GetUser('public_id') userId: string,
-    @Query('date') date?: string, // Expecting YYYY-MM-DD
-  ): Promise<MonthlyStatsResponseDto> {
-    return await this.caffeineService.getMonthlyTrend(userId, date);
-  }
-  */
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('calendar')
