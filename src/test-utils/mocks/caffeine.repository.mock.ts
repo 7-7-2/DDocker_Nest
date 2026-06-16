@@ -11,5 +11,6 @@ export const createCaffeineRepositoryMock = (): Mock<CaffeineRepository> => ({
   findIntakesInRange: jest.fn(),
   softDeleteIntake: jest.fn(),
   findById: jest.fn(),
+  findDetailedIntakesInRange: jest.fn(),
   getQueryRunner: jest.fn(() => createQueryRunnerMock()),
 });

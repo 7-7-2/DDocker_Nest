@@ -182,6 +182,26 @@ export class CaffeineRepository extends BaseRepository {
     ]);
   }
 
+  async findDetailedIntakesInRange(
+    userId: string,
+    start: string,
+    end: string,
+  ): Promise<
+    (CaffeineIntakeRangeRow & { brand_id: number; brand_name: string })[]
+  > {
+    const query = `
+      SELECT i.id, i.caffeine, i.created_at, i.brand_id, b.brand_name
+      FROM caffeine_intake i
+      JOIN brand b ON i.brand_id = b.id
+      WHERE i.user_id = ?
+        AND i.created_at >= ?
+        AND i.created_at <= ?
+        AND i.deleted_at IS NULL
+      ORDER BY i.created_at ASC
+    `;
+    return await this.mysql.query<any>(query, [userId, start, end]);
+  }
+
   async softDeleteIntake(
     intakeId: number,
     queryRunner?: QueryRunner,

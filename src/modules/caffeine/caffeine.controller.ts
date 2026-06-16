@@ -21,10 +21,8 @@ import {
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { CaffeineMonthlyViewDto } from './dto/caffeine-calendar.dto';
-import {
-  TodayCaffeineResponseDto,
-  MonthlyStatsResponseDto,
-} from './dto/caffeine-stats.dto';
+import { TodayCaffeineResponseDto } from './dto/caffeine-stats.dto';
+import { IntakeTrendResponseDto } from './dto/intake-trend.dto';
 
 @ApiTags('Caffeine')
 @Controller('caffeine')
@@ -67,6 +65,20 @@ export class CaffeineController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Get('analysis')
+  @ApiOperation({ summary: '통계 분석 탭 데이터 조회' })
+  @ApiResponse({ status: 200, type: IntakeTrendResponseDto })
+  async getIntakeTrend(
+    @GetUser('public_id') userId: string,
+    @Query('date') date: string,
+    @Query('unit') unit: 'weekly' | 'monthly',
+  ): Promise<IntakeTrendResponseDto> {
+    return await this.caffeineService.getIntakeTrend(userId, date, unit);
+  }
+
+  /* deprecated
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('trend')
   @ApiOperation({ summary: '기간별 섭취 동향 (기간 단위별 이전 6개 기간)' })
   @ApiResponse({ status: 200, type: MonthlyStatsResponseDto })
@@ -76,7 +88,7 @@ export class CaffeineController {
   ): Promise<MonthlyStatsResponseDto> {
     return await this.caffeineService.getMonthlyTrend(userId, date);
   }
-
+  */
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('calendar')
