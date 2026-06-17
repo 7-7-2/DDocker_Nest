@@ -9,6 +9,7 @@ import { Cache } from 'cache-manager';
 import { BrandRepository, BrandMenuResponse } from './brand.repository';
 import { RedisService } from '../../providers/redis/redis.service';
 import { PopularProductDto } from './dto/popular-product.dto';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
 import {
   ComparisonResponseDto,
   ComparisonItemDto,
@@ -17,10 +18,6 @@ import {
 @Injectable()
 export class BrandService {
   private readonly logger = new Logger(BrandService.name);
-  private readonly BRAND_CACHE_KEY = 'brand_all_data';
-  private readonly BRAND_MAP_KEY = 'brand_id_map';
-  private readonly BRAND_NAME_MAP_KEY = 'brand_name_map';
-  private readonly PRODUCT_TYPE_MAP_KEY = 'product_type_map';
   private readonly CACHE_TTL = 3600000; // 1 hour
 
   constructor(
@@ -35,7 +32,7 @@ export class BrandService {
     if (!isNaN(maybeId)) return maybeId;
 
     let brandMap = await this.cacheManager.get<Record<string, number>>(
-      this.BRAND_MAP_KEY,
+      REDIS_KEYS.BRAND.ID_MAP,
     );
 
     if (!brandMap) {
@@ -48,7 +45,7 @@ export class BrandService {
 
   async resolveBrandName(id: string | number): Promise<string | null> {
     let nameMap = await this.cacheManager.get<Record<number, string>>(
-      this.BRAND_NAME_MAP_KEY,
+      REDIS_KEYS.BRAND.NAME_MAP,
     );
 
     if (!nameMap) {
@@ -74,9 +71,9 @@ export class BrandService {
       nameMap[b.id] = b.brand_name;
     });
 
-    await this.cacheManager.set(this.BRAND_MAP_KEY, idMap, this.CACHE_TTL);
+    await this.cacheManager.set(REDIS_KEYS.BRAND.ID_MAP, idMap, this.CACHE_TTL);
     await this.cacheManager.set(
-      this.BRAND_NAME_MAP_KEY,
+      REDIS_KEYS.BRAND.NAME_MAP,
       nameMap,
       this.CACHE_TTL,
     );
@@ -93,7 +90,7 @@ export class BrandService {
 
   async getBrandData(): Promise<BrandMenuResponse> {
     const cachedData = await this.cacheManager.get<BrandMenuResponse>(
-      this.BRAND_CACHE_KEY,
+      REDIS_KEYS.BRAND.ALL_DATA,
     );
 
     if (cachedData) {
@@ -104,7 +101,11 @@ export class BrandService {
     this.logger.log('Cache miss. Fetching aggregated brand data from DB.');
     const data = await this.brandRepository.getAggregatedBrandData();
 
-    await this.cacheManager.set(this.BRAND_CACHE_KEY, data, this.CACHE_TTL);
+    await this.cacheManager.set(
+      REDIS_KEYS.BRAND.ALL_DATA,
+      data,
+      this.CACHE_TTL,
+    );
 
     const productTypeMap: Record<string, { type: string; caffeine: number }> =
       {};
@@ -115,7 +116,7 @@ export class BrandService {
       });
     });
     await this.cacheManager.set(
-      this.PRODUCT_TYPE_MAP_KEY,
+      REDIS_KEYS.BRAND.PRODUCT_TYPE_MAP,
       productTypeMap,
       this.CACHE_TTL,
     );
@@ -126,7 +127,11 @@ export class BrandService {
   async refreshCache(): Promise<void> {
     this.logger.log('Manually refreshing brand cache...');
     const data = await this.brandRepository.getAggregatedBrandData();
-    await this.cacheManager.set(this.BRAND_CACHE_KEY, data, this.CACHE_TTL);
+    await this.cacheManager.set(
+      REDIS_KEYS.BRAND.ALL_DATA,
+      data,
+      this.CACHE_TTL,
+    );
 
     await this.redisService.delByPattern('comparison:list:*');
   }
@@ -138,7 +143,7 @@ export class BrandService {
     try {
       const productTypeMap = await this.cacheManager.get<
         Record<string, { type: string; caffeine: number }>
-      >(this.PRODUCT_TYPE_MAP_KEY);
+      >(REDIS_KEYS.BRAND.PRODUCT_TYPE_MAP);
 
       if (!productTypeMap) {
         await this.getBrandData();
@@ -154,7 +159,7 @@ export class BrandService {
         );
       }
 
-      const cacheKey = `comparison:list:${source.type}`;
+      const cacheKey = REDIS_KEYS.BRAND.COMPARISON(source.type);
       const TTL_30D = 2592000;
 
       const allMatches = await this.redisService.getOrSet(

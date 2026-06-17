@@ -7,17 +7,20 @@ import {
 import { LikeRepository } from './like.repository';
 import { RedisService } from '../../providers/redis/redis.service';
 import { PostRepository } from '../post/post.repository';
-import { NotificationService } from '../notification/notification.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
+import {
+  PostLikedEvent,
+  PostUnlikedEvent,
+} from '../../common/events/interaction.events';
 
 @Injectable()
 export class LikeService {
-  private readonly REDIS_PREFIX = 'post:likes:';
-
   constructor(
     private readonly likeRepository: LikeRepository,
     private readonly redisService: RedisService,
     private readonly postRepository: PostRepository,
-    private readonly notificationService: NotificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async likePost(
@@ -45,19 +48,12 @@ export class LikeService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.sadd(`${this.REDIS_PREFIX}${postId}`, userId);
-      await this.redisService.del(`post:stats:${postId}`);
+      await this.redisService.sadd(REDIS_KEYS.POST.LIKES(postId), userId);
 
-      // Send notification if not self
-      if (userId !== post.user_id) {
-        await this.notificationService.pushNotification(post.user_id, {
-          type: 'like',
-          senderId: userId,
-          senderNickname: likerNickname,
-          postId: postId,
-          time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
-        });
-      }
+      this.eventEmitter.emit(
+        'post.liked',
+        new PostLikedEvent(userId, likerNickname, postId, post.user_id),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       if (error instanceof NotFoundException) throw error;
@@ -83,8 +79,12 @@ export class LikeService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.srem(`${this.REDIS_PREFIX}${postId}`, userId);
-      await this.redisService.del(`post:stats:${postId}`);
+      await this.redisService.srem(REDIS_KEYS.POST.LIKES(postId), userId);
+
+      this.eventEmitter.emit(
+        'post.unliked',
+        new PostUnlikedEvent(userId, postId),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('Failed to unlike post');
@@ -94,7 +94,7 @@ export class LikeService {
   }
 
   async isLiked(userId: string, postId: string): Promise<boolean> {
-    const cacheKey = `${this.REDIS_PREFIX}${postId}`;
+    const cacheKey = REDIS_KEYS.POST.LIKES(postId);
 
     const inCache = await this.redisService.sismember(cacheKey, userId);
     if (inCache) return true;

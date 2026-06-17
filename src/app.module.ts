@@ -2,6 +2,7 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_PIPE, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { MysqlModule } from './providers/mysql/mysql.module';
@@ -21,6 +22,7 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { FavoriteModule } from './modules/favorite/favorite.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
+import { InteractionModule } from './modules/interaction/interaction.module';
 import { R2Module } from './providers/r2/r2.module';
 import { DynamoDbModule } from './providers/dynamodb/dynamodb.module';
 //Configs
@@ -80,6 +82,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     }),
     MysqlModule,
     RedisModule,
+    EventEmitterModule.forRoot(),
     //App Modules
     BrandModule,
     UserModule,
@@ -97,6 +100,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     R2Module,
     StorageModule,
     DiscoveryModule,
+    InteractionModule,
     DynamoDbModule,
   ],
   controllers: [],

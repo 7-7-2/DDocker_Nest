@@ -2,9 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CommentService } from './comment.service';
 import { CommentRepository } from './comment.repository';
 import { PostRepository } from '../post/post.repository';
-import { NotificationService } from '../notification/notification.service';
-import { RedisService } from '../../providers/redis/redis.service';
-import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createCommentRepositoryMock } from '../../test-utils/mocks/comment.repository.mock';
 import { createPostRepositoryMock } from '../../test-utils/mocks/post.repository.mock';
 import { NotFoundException } from '@nestjs/common';
@@ -15,8 +13,7 @@ describe('CommentService', () => {
   let service: CommentService;
   let commentRepository: Mock<CommentRepository>;
   let postRepository: Mock<PostRepository>;
-  let notificationService: Mock<NotificationService>;
-  let redisService: Mock<RedisService>;
+  let eventEmitter: Mock<EventEmitter2>;
   let queryRunner: jest.Mocked<QueryRunner>;
 
   beforeEach(async () => {
@@ -35,9 +32,9 @@ describe('CommentService', () => {
           useValue: createPostRepositoryMock(),
         },
         {
-          provide: NotificationService,
+          provide: EventEmitter2,
           useValue: {
-            pushNotification: jest.fn(),
+            emit: jest.fn(),
           },
         },
         { provide: RedisService, useValue: createRedisServiceMock() },
@@ -47,8 +44,7 @@ describe('CommentService', () => {
     service = module.get<CommentService>(CommentService);
     commentRepository = module.get(CommentRepository);
     postRepository = module.get(PostRepository);
-    notificationService = module.get(NotificationService);
-    redisService = module.get(RedisService);
+    eventEmitter = module.get(EventEmitter2);
 
     commentRepository.getQueryRunner!.mockReturnValue(queryRunner);
   });
@@ -88,7 +84,10 @@ describe('CommentService', () => {
         queryRunner,
       );
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
-      expect(notificationService.pushNotification).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'comment.created',
+        expect.anything(),
+      );
     });
   });
 
@@ -109,7 +108,10 @@ describe('CommentService', () => {
         queryRunner,
       );
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
-      expect(redisService.del).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'comment.deleted',
+        expect.anything(),
+      );
     });
   });
 });

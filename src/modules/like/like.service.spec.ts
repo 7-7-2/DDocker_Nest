@@ -3,7 +3,7 @@ import { LikeService } from './like.service';
 import { LikeRepository } from './like.repository';
 import { RedisService } from '../../providers/redis/redis.service';
 import { PostRepository } from '../post/post.repository';
-import { NotificationService } from '../notification/notification.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
 import { createLikeRepositoryMock } from '../../test-utils/mocks/like.repository.mock';
 import { createPostRepositoryMock } from '../../test-utils/mocks/post.repository.mock';
@@ -16,7 +16,7 @@ describe('LikeService', () => {
   let likeRepository: Mock<LikeRepository>;
   let redisService: Mock<RedisService>;
   let postRepository: Mock<PostRepository>;
-  let notificationService: Mock<NotificationService>;
+  let eventEmitter: Mock<EventEmitter2>;
   let queryRunner: jest.Mocked<QueryRunner>;
 
   beforeEach(async () => {
@@ -36,9 +36,9 @@ describe('LikeService', () => {
           useValue: createPostRepositoryMock(),
         },
         {
-          provide: NotificationService,
+          provide: EventEmitter2,
           useValue: {
-            pushNotification: jest.fn(),
+            emit: jest.fn(),
           },
         },
       ],
@@ -48,7 +48,7 @@ describe('LikeService', () => {
     likeRepository = module.get(LikeRepository);
     redisService = module.get(RedisService);
     postRepository = module.get(PostRepository);
-    notificationService = module.get(NotificationService);
+    eventEmitter = module.get(EventEmitter2);
 
     likeRepository.getQueryRunner!.mockReturnValue(queryRunner);
   });
@@ -94,7 +94,10 @@ describe('LikeService', () => {
       );
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
       expect(redisService.sadd).toHaveBeenCalled();
-      expect(notificationService.pushNotification).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'post.liked',
+        expect.anything(),
+      );
     });
   });
 
@@ -119,6 +122,10 @@ describe('LikeService', () => {
       );
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
       expect(redisService.srem).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'post.unliked',
+        expect.anything(),
+      );
     });
   });
 });

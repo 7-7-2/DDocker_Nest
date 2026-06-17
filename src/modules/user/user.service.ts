@@ -17,6 +17,7 @@ import { OAuthUser } from '../../auth/interfaces/oauth-user.interface';
 import { UserRepository, UserWithStatsRow } from './user.repository';
 import { BrandService } from '../brand/brand.service';
 import { AuthService } from '../../auth/auth.service';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
 
 type PatchUser = Omit<UpdateUserDto, 'brand'> & { fav_brand_id: number };
 
@@ -96,7 +97,7 @@ export class UserService {
   }
 
   async getUserInfo(userId: string): Promise<UserResponseDto> {
-    const cacheKey = `user:profile:${userId}`;
+    const cacheKey = REDIS_KEYS.USER.PROFILE(userId);
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
       const userWithStats = await this.userRepository.findUserWithStats(userId);
 
@@ -129,14 +130,14 @@ export class UserService {
       userId,
       brand ? updateData : rest,
     );
-    await this.redisService.del(`user:profile:${userId}`);
+    await this.redisService.del(REDIS_KEYS.USER.PROFILE(userId));
   }
 
   async deleteAccount(userId: string): Promise<void> {
     await this.userRepository.deleteAccount(userId);
     await this.redisService.del([
-      `user:profile:${userId}`,
-      `user:stats:${userId}`,
+      REDIS_KEYS.USER.PROFILE(userId),
+      REDIS_KEYS.USER.STATS(userId),
     ]);
   }
 
@@ -164,7 +165,7 @@ export class UserService {
   async getUserFollowCounts(
     userId: string,
   ): Promise<{ follower: number; following: number }> {
-    const cacheKey = `user:stats:${userId}`;
+    const cacheKey = REDIS_KEYS.USER.STATS(userId);
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
       const counts = await this.userRepository.findUserFollowCounts(userId);
       return counts || { follower: 0, following: 0 };

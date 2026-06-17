@@ -8,6 +8,7 @@ import {
 
 import { RedisService } from '../../providers/redis/redis.service';
 import { BrandService } from '../brand/brand.service';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
 
 import * as dayjs from 'dayjs';
 import * as utc from 'dayjs/plugin/utc';
@@ -30,8 +31,10 @@ export class DiscoveryService {
 
   async getBrandRanking(): Promise<BrandRankingDto[]> {
     const fakeKSTNow = dayjs.utc().add(9, 'hour');
-    const weeklyKey = `brand:ranking:weekly:${fakeKSTNow.format('GGGG-WW')}`;
-    const allKey = 'brand:ranking:all';
+    const weeklyKey = REDIS_KEYS.BRAND.RANKING_WEEKLY(
+      fakeKSTNow.format('GGGG-WW'),
+    );
+    const allKey = REDIS_KEYS.BRAND.RANKING_ALL;
 
     const ranking = await this.redisService.zrevrangeWithScores(
       weeklyKey,
@@ -86,21 +89,21 @@ export class DiscoveryService {
   }
 
   async getDailyPopular(): Promise<FeedPostDto[]> {
-    const cacheKey = 'discovery:popular:daily';
+    const cacheKey = REDIS_KEYS.DISCOVERY.DAILY_POPULAR;
     return await this.redisService.getOrSet(cacheKey, 900, async () => {
       return await this.discoveryRepository.findDailyPopular();
     });
   }
 
   async getBrandRecentPosts(brandId: number): Promise<FeedPostDto[]> {
-    const cacheKey = `discovery:brand:recent:${brandId}`;
+    const cacheKey = REDIS_KEYS.DISCOVERY.RECENT(brandId);
     return await this.redisService.getOrSet(cacheKey, 120, async () => {
       return await this.discoveryRepository.findBrandRecentPosts(brandId);
     });
   }
 
   async getBrandPopularPosts(brandId: number): Promise<FeedPostDto[]> {
-    const cacheKey = `discovery:brand:popular:${brandId}`;
+    const cacheKey = REDIS_KEYS.DISCOVERY.POPULAR(brandId);
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
       return await this.discoveryRepository.findBrandPopularPosts(brandId);
     });
@@ -109,7 +112,7 @@ export class DiscoveryService {
   async getBrandPopularMenu(
     brandId: number,
   ): Promise<BrandPopularMenuDto | null> {
-    const cacheKey = `discovery:brand:popular-menu:${brandId}`;
+    const cacheKey = REDIS_KEYS.DISCOVERY.POPULAR_MENU(brandId);
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
       const result =
         await this.discoveryRepository.findWeeklyPopularBrandMenu(brandId);
