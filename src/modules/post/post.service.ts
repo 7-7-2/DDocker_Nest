@@ -18,6 +18,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { CaffeineRepository } from '../caffeine/caffeine.repository';
 import { UserProfilePostsResponseDto } from '../user/dto/user-profile-posts.dto';
 import { BrandService } from '../brand/brand.service';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
 import * as dayjs from 'dayjs';
 
 @Injectable()
@@ -79,9 +80,9 @@ export class PostService {
       await queryRunner.commitTransaction();
 
       await this.redisService.del([
-        `user:stats:${userId}`,
-        `user:posts:${userId}:grid:page1`,
-        `user:posts:${userId}:list:page1`,
+        REDIS_KEYS.USER.STATS(userId),
+        REDIS_KEYS.USER.POSTS(userId, 'grid'),
+        REDIS_KEYS.USER.POSTS(userId, 'list'),
       ]);
 
       this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
@@ -137,20 +138,20 @@ export class PostService {
 
       // Clear common post caches
       await this.redisService.del([
-        `user:stats:${userId}`,
-        `post:detail:${postId}`,
-        `post:stats:${postId}`,
-        `user:posts:${userId}:grid:page1`,
-        `user:posts:${userId}:list:page1`,
+        REDIS_KEYS.USER.STATS(userId),
+        REDIS_KEYS.POST.DETAIL(postId),
+        REDIS_KEYS.POST.STATS(postId),
+        REDIS_KEYS.USER.POSTS(userId, 'grid'),
+        REDIS_KEYS.USER.POSTS(userId, 'list'),
       ]);
 
       // NEW: Clear caffeine caches to update main page / stats immediately
       const intakeDate = dayjs(post.created_at).add(9, 'hour');
       const monthKey = intakeDate.format('YYYY-MM');
       await this.redisService.del([
-        `caffeine:today:${userId}`,
-        `caffeine:monthly:${userId}:${monthKey}`,
-        `user:profile:${userId}`,
+        REDIS_KEYS.CAFFEINE.TODAY(userId),
+        REDIS_KEYS.CAFFEINE.MONTHLY(userId, monthKey),
+        REDIS_KEYS.USER.PROFILE(userId),
       ]);
 
       await this.caffeineService.updateBrandRanking(
@@ -183,15 +184,15 @@ export class PostService {
 
     await this.postRepository.patchPost(postId, dto);
     await this.redisService.del([
-      `user:stats:${userId}`,
-      `post:detail:${postId}`,
-      `user:posts:${userId}:grid:page1`,
-      `user:posts:${userId}:list:page1`,
+      REDIS_KEYS.USER.STATS(userId),
+      REDIS_KEYS.POST.DETAIL(postId),
+      REDIS_KEYS.USER.POSTS(userId, 'grid'),
+      REDIS_KEYS.USER.POSTS(userId, 'list'),
     ]);
   }
 
   async getPostDetail(postId: string): Promise<PostResponseDto> {
-    const cacheKey = `post:detail:${postId}`;
+    const cacheKey = REDIS_KEYS.POST.DETAIL(postId);
     return await this.redisService.getOrSet(cacheKey, 300, async () => {
       const stats = await this.getStatsWithFallback(postId);
       const row = await this.postRepository.findPostDetail(postId);
@@ -209,7 +210,7 @@ export class PostService {
       cursor === 'null' || cursor === 'undefined' ? null : cursor;
 
     const isPage1 = sanitizedCursor === null;
-    const cacheKey = `post:feed:following:${userId}`;
+    const cacheKey = REDIS_KEYS.POST.FEED(userId);
 
     if (isPage1) {
       return await this.redisService.getOrSet(cacheKey, 120, async () => {
@@ -255,7 +256,7 @@ export class PostService {
   async getStatsWithFallback(
     postId: string,
   ): Promise<{ likeCount: number; commentCount: number }> {
-    const cacheKey = `post:stats:${postId}`;
+    const cacheKey = REDIS_KEYS.POST.STATS(postId);
     return await this.redisService.getOrSet(cacheKey, 300, async () => {
       const dbStats = await this.postRepository.findPostStats(postId);
       return {
@@ -279,7 +280,7 @@ export class PostService {
       cursor === 'null' || cursor === 'undefined' ? undefined : cursor;
 
     const isPage1 = sanitizedCursor === undefined;
-    const cacheKey = `user:posts:${userId}:${type}:page1`;
+    const cacheKey = REDIS_KEYS.USER.POSTS(userId, type);
 
     if (isPage1) {
       return await this.redisService.getOrSet(cacheKey, 300, async () => {

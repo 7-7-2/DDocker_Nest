@@ -29,6 +29,7 @@ import {
 
 import { RedisService } from '../../providers/redis/redis.service';
 import { PostService } from '../post/post.service';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
 
 import * as dayjs from 'dayjs';
 import * as utc from 'dayjs/plugin/utc';
@@ -179,17 +180,16 @@ export class CaffeineService {
     const dayKey = targetDate.format('YYYY-MM-DD');
 
     const keys = [
-      `caffeine:today:${userId}`,
-      `caffeine:monthly:${userId}:${calendarMonthKey}`,
-      `caffeine:stats:chart:${userId}:${dayKey}`,
-      `user:profile:${userId}`,
-      `user:stats:${userId}`,
+      REDIS_KEYS.CAFFEINE.TODAY(userId),
+      REDIS_KEYS.CAFFEINE.MONTHLY(userId, calendarMonthKey),
+      REDIS_KEYS.USER.PROFILE(userId),
+      REDIS_KEYS.USER.STATS(userId),
     ];
     await this.redisService.del(keys);
   }
 
   async getTodayConsumption(userId: string): Promise<TodayCaffeineResponseDto> {
-    const cacheKey = `caffeine:today:${userId}`;
+    const cacheKey = REDIS_KEYS.CAFFEINE.TODAY(userId);
     return await this.redisService.getOrSet(cacheKey, 10800, async () => {
       const fakeKSTNow = dayjs.utc().add(9, 'hour');
       const start = fakeKSTNow.startOf('day');
@@ -220,7 +220,7 @@ export class CaffeineService {
   ): Promise<IntakeTrendResponseDto> {
     const anchor = dayjs.utc(dateStr).add(9, 'hour');
     const dayKey = anchor.format('YYYY-MM-DD');
-    const cacheKey = `caffeine:analysis:${userId}:${unit}:${dayKey}`;
+    const cacheKey = REDIS_KEYS.CAFFEINE.ANALYSIS(userId, unit, dayKey);
 
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
       const context = createIntakeTrendContext(anchor, unit);
@@ -268,7 +268,7 @@ export class CaffeineService {
   ): Promise<CaffeineMonthlyViewDto> {
     const fakeKSTDate = dayjs.utc(dateStr).add(9, 'hour');
     const monthKey = fakeKSTDate.format('YYYY-MM');
-    const cacheKey = `caffeine:monthly:${userId}:${monthKey}`;
+    const cacheKey = REDIS_KEYS.CAFFEINE.MONTHLY(userId, monthKey);
 
     return await this.redisService.getOrSet(cacheKey, 86400, async () => {
       const { start, end } = this.getMonthRange(dateStr);

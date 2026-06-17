@@ -9,18 +9,20 @@ import {
   PaginatedFollowResponseDto,
   FollowUserItemDto,
 } from './dto/follow-list.dto';
-import { NotificationService } from '../notification/notification.service';
-
 import { RedisService } from '../../providers/redis/redis.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
+import {
+  UserFollowedEvent,
+  UserUnfollowedEvent,
+} from '../../common/events/interaction.events';
 
 @Injectable()
 export class FollowService {
-  private readonly FOLLOW_SET_PREFIX = 'follow:set:';
-
   constructor(
     private readonly followRepository: FollowRepository,
-    private readonly notificationService: NotificationService,
     private readonly redisService: RedisService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async follow(
@@ -69,23 +71,20 @@ export class FollowService {
       await queryRunner.commitTransaction();
 
       await this.redisService.sadd(
-        `${this.FOLLOW_SET_PREFIX}${followerId}`,
+        REDIS_KEYS.FOLLOW.SET(followerId),
         followedId,
       );
-      await this.invalidateFollowCaches(followerId, followedId);
+
+      this.eventEmitter.emit(
+        'user.followed',
+        new UserFollowedEvent(followerId, followerNickname, followedId),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
       await queryRunner.release();
     }
-
-    await this.notificationService.pushNotification(followedId, {
-      type: 'follow',
-      senderId: followerId,
-      senderNickname: followerNickname,
-      time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
-    });
   }
 
   async unfollow(followerId: string, followedId: string): Promise<void> {
@@ -124,10 +123,14 @@ export class FollowService {
       await queryRunner.commitTransaction();
 
       await this.redisService.srem(
-        `${this.FOLLOW_SET_PREFIX}${followerId}`,
+        REDIS_KEYS.FOLLOW.SET(followerId),
         followedId,
       );
-      await this.invalidateFollowCaches(followerId, followedId);
+
+      this.eventEmitter.emit(
+        'user.unfollowed',
+        new UserUnfollowedEvent(followerId, followedId),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -136,24 +139,12 @@ export class FollowService {
     }
   }
 
-  private async invalidateFollowCaches(followerId: string, followedId: string) {
-    const keys = [
-      `user:profile:${followerId}`,
-      `user:profile:${followedId}`,
-      `user:stats:${followerId}`,
-      `user:stats:${followedId}`,
-      `follow:list:following:${followerId}:page1`,
-      `follow:list:followers:${followedId}:page1`,
-    ];
-    await this.redisService.del(keys);
-  }
-
   async getFollowers(
     userId: string,
     cursor: number | null,
   ): Promise<PaginatedFollowResponseDto> {
     const isPage1 = cursor === null;
-    const cacheKey = `follow:list:followers:${userId}:page1`;
+    const cacheKey = REDIS_KEYS.FOLLOW.LIST(userId, 'followers');
 
     if (isPage1) {
       return await this.redisService.getOrSet(cacheKey, 300, async () => {
@@ -181,7 +172,7 @@ export class FollowService {
     cursor: number | null,
   ): Promise<PaginatedFollowResponseDto> {
     const isPage1 = cursor === null;
-    const cacheKey = `follow:list:following:${userId}:page1`;
+    const cacheKey = REDIS_KEYS.FOLLOW.LIST(userId, 'following');
 
     if (isPage1) {
       return await this.redisService.getOrSet(cacheKey, 300, async () => {
@@ -226,7 +217,7 @@ export class FollowService {
   }
 
   async isFollowing(followerId: string, followedId: string): Promise<boolean> {
-    const cacheKey = `${this.FOLLOW_SET_PREFIX}${followerId}`;
+    const cacheKey = REDIS_KEYS.FOLLOW.SET(followerId);
 
     const inCache = await this.redisService.sismember(cacheKey, followedId);
     if (inCache) return true;

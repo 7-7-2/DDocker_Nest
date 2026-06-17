@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FollowService } from './follow.service';
 import { FollowRepository } from './follow.repository';
-import { NotificationService } from '../notification/notification.service';
 import { RedisService } from '../../providers/redis/redis.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
 import { createFollowRepositoryMock } from '../../test-utils/mocks/follow.repository.mock';
 import {
@@ -16,7 +16,7 @@ import { QueryRunner } from 'typeorm';
 describe('FollowService', () => {
   let service: FollowService;
   let followRepository: Mock<FollowRepository>;
-  let notificationService: Mock<NotificationService>;
+  let eventEmitter: Mock<EventEmitter2>;
   let queryRunner: jest.Mocked<QueryRunner>;
 
   beforeEach(async () => {
@@ -31,9 +31,9 @@ describe('FollowService', () => {
           useValue: repoMock,
         },
         {
-          provide: NotificationService,
+          provide: EventEmitter2,
           useValue: {
-            pushNotification: jest.fn(),
+            emit: jest.fn(),
           },
         },
         { provide: RedisService, useValue: createRedisServiceMock() },
@@ -42,7 +42,7 @@ describe('FollowService', () => {
 
     service = module.get<FollowService>(FollowService);
     followRepository = module.get(FollowRepository);
-    notificationService = module.get(NotificationService);
+    eventEmitter = module.get(EventEmitter2);
 
     followRepository.getQueryRunner!.mockReturnValue(queryRunner);
   });
@@ -88,7 +88,10 @@ describe('FollowService', () => {
       );
       expect(followRepository.incrementFollowCounts).toHaveBeenCalled();
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
-      expect(notificationService.pushNotification).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'user.followed',
+        expect.anything(),
+      );
     });
   });
 
@@ -115,6 +118,10 @@ describe('FollowService', () => {
       );
       expect(followRepository.decrementFollowCounts).toHaveBeenCalled();
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'user.unfollowed',
+        expect.anything(),
+      );
     });
   });
 });

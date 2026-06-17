@@ -17,16 +17,23 @@ import {
   ReplyWithAuthorRow,
 } from './entities/comment.entity';
 import { PostRepository } from '../post/post.repository';
-import { NotificationService } from '../notification/notification.service';
 import { RedisService } from '../../providers/redis/redis.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { REDIS_KEYS } from '../../common/constants/redis-keys';
+import {
+  CommentCreatedEvent,
+  ReplyCreatedEvent,
+  CommentDeletedEvent,
+  ReplyDeletedEvent,
+} from '../../common/events/interaction.events';
 
 @Injectable()
 export class CommentService {
   constructor(
     private readonly commentRepository: CommentRepository,
     private readonly postRepository: PostRepository,
-    private readonly notificationService: NotificationService,
     private readonly redisService: RedisService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createComment(
@@ -60,18 +67,16 @@ export class CommentService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.del(`post:comments:${dto.postId}`);
-      await this.redisService.del(`post:stats:${dto.postId}`);
-
-      if (userId !== post.user_id) {
-        await this.notificationService.pushNotification(post.user_id, {
-          type: 'comment',
-          senderId: userId,
-          senderNickname: commenterNickname,
-          postId: dto.postId,
-          time: new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
-        });
-      }
+      this.eventEmitter.emit(
+        'comment.created',
+        new CommentCreatedEvent(
+          userId,
+          commenterNickname,
+          dto.postId,
+          post.user_id,
+          dto.content,
+        ),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       if (error instanceof NotFoundException) throw error;
@@ -104,9 +109,16 @@ export class CommentService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.del(`post:comments:${dto.postId}`);
-      await this.redisService.del(`comment:replies:${dto.commentId}`);
-      await this.redisService.del(`post:stats:${dto.postId}`);
+      this.eventEmitter.emit(
+        'reply.created',
+        new ReplyCreatedEvent(
+          userId,
+          '', // nickname not strictly required here based on payload but good to have
+          dto.postId,
+          dto.commentId,
+          dto.content,
+        ),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('Failed to add reply');
@@ -134,8 +146,10 @@ export class CommentService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.del(`post:comments:${dto.postId}`);
-      await this.redisService.del(`post:stats:${dto.postId}`);
+      this.eventEmitter.emit(
+        'comment.deleted',
+        new CommentDeletedEvent(dto.postId, dto.commentId),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('Failed to delete comment');
@@ -164,9 +178,10 @@ export class CommentService {
 
       await queryRunner.commitTransaction();
 
-      await this.redisService.del(`comment:replies:${dto.commentId}`);
-      await this.redisService.del(`post:comments:${dto.postId}`);
-      await this.redisService.del(`post:stats:${dto.postId}`);
+      this.eventEmitter.emit(
+        'reply.deleted',
+        new ReplyDeletedEvent(dto.postId, dto.commentId),
+      );
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('Failed to delete reply');
@@ -177,7 +192,7 @@ export class CommentService {
 
   async getCommentsByPost(postId: string): Promise<CommentResponseDto[]> {
     return await this.redisService.getOrSet(
-      `post:comments:${postId}`,
+      REDIS_KEYS.POST.COMMENTS(postId),
       300,
       async () => {
         const rows = await this.commentRepository.findCommentsByPost(postId);
@@ -188,7 +203,7 @@ export class CommentService {
 
   async getRepliesByComment(commentId: number): Promise<ReplyResponseDto[]> {
     return await this.redisService.getOrSet(
-      `comment:replies:${commentId}`,
+      REDIS_KEYS.COMMENT.REPLIES(commentId),
       300,
       async () => {
         const rows =
