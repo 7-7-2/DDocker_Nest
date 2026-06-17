@@ -38,24 +38,24 @@ describe('IntakeTrendBuilder', () => {
   ];
 
   describe('Weekly Context', () => {
-    it('should calculate 6 weekly ranges ending with current week', () => {
+    it('should calculate 7 weekly ranges ending with current week', () => {
       const context = createIntakeTrendContext(anchor, 'weekly');
-      expect(context.chartRanges).toHaveLength(6);
+      expect(context.chartRanges).toHaveLength(7);
       expect(context.daysInPeriod).toBe(7);
 
-      const lastRange = context.chartRanges[5];
+      const lastRange = context.chartRanges[6];
       expect(lastRange.start.format('YYYY-MM-DD')).toBe('2024-06-10'); // Monday
       expect(lastRange.end.format('YYYY-MM-DD')).toBe('2024-06-16'); // Sunday
     });
   });
 
   describe('Monthly Context', () => {
-    it('should calculate 6 monthly ranges ending with current month', () => {
+    it('should calculate 7 monthly ranges ending with current month', () => {
       const context = createIntakeTrendContext(anchor, 'monthly');
-      expect(context.chartRanges).toHaveLength(6);
+      expect(context.chartRanges).toHaveLength(7);
       expect(context.daysInPeriod).toBe(30); // June has 30 days
 
-      const lastRange = context.chartRanges[5];
+      const lastRange = context.chartRanges[6];
       expect(lastRange.start.format('YYYY-MM')).toBe('2024-06');
     });
   });
@@ -75,6 +75,8 @@ describe('IntakeTrendBuilder', () => {
       // Metrics: Current week has id 1, 2 and 3
       expect(result.metrics.sum).toBe(3);
       expect(result.metrics.totalDays).toBe(2); // 06-15 and 06-16
+      // Daily Average: 3 cups / 7 days = 0.4285... -> standard round to 1 decimal: 0.4
+      expect(result.metrics.dailyAverage).toBe(0.4);
 
       // Thresholds:
       // 2024-06-16 has 450mg (Excessive)

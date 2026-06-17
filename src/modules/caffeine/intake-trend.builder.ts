@@ -36,7 +36,6 @@ export class IntakeTrendBuilder {
     private readonly allIntakes: DetailedIntake[],
   ) {
     this.currentIntakes = allIntakes.filter((i) => {
-      // Use "fake KST" for consistent filtering
       const d = dayjs(i.created_at).add(9, 'hour');
       return (
         (d.isAfter(context.currentRange.start) ||
@@ -81,9 +80,9 @@ export class IntakeTrendBuilder {
     });
 
     const totalCups = this.currentIntakes.length;
-    const dailyAverage = Number(
-      (totalCups / this.context.daysInPeriod).toFixed(1),
-    );
+    const rawAverage = totalCups / this.context.daysInPeriod;
+    // Round to 1 decimal place using standard rounding
+    const dailyAverage = Math.round(rawAverage * 10) / 10;
 
     this.result.metrics = {
       dailyAverage,
@@ -154,7 +153,7 @@ export function createIntakeTrendContext(
     const thisWeekStart = anchor.startOf('isoWeek');
     const thisWeekEnd = anchor.endOf('isoWeek');
 
-    for (let i = 5; i >= 1; i--) {
+    for (let i = 6; i >= 1; i--) {
       const weekStart = thisWeekStart.subtract(i, 'week');
       chartRanges.push({
         start: weekStart,
@@ -174,7 +173,7 @@ export function createIntakeTrendContext(
     const thisMonthStart = anchor.startOf('month');
     const thisMonthEnd = anchor.endOf('month');
 
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 6; i >= 0; i--) {
       const monthStart = thisMonthStart.subtract(i, 'month');
       chartRanges.push({
         start: monthStart,
