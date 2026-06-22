@@ -3,6 +3,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { FollowRepository, FollowListRow } from './follow.repository';
 import {
@@ -16,13 +17,17 @@ import {
   UserFollowedEvent,
   UserUnfollowedEvent,
 } from '../../common/events/interaction.events';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
 @Injectable()
 export class FollowService {
+  private readonly logger = new Logger(FollowService.name);
+
   constructor(
     private readonly followRepository: FollowRepository,
     private readonly redisService: RedisService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly txManager: TransactionManager,
   ) {}
 
   async follow(
@@ -41,50 +46,43 @@ export class FollowService {
 
     const isNowMutual = await this.isFollowing(followedId, followerId);
 
-    const queryRunner = await this.followRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      await this.followRepository.follow(
-        followerId,
-        followedId,
-        isNowMutual,
-        queryRunner,
-      );
-
-      if (isNowMutual) {
-        await this.followRepository.updateMutualStatus(
-          followedId,
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.followRepository.follow(
           followerId,
-          true,
+          followedId,
+          isNowMutual,
           queryRunner,
         );
-      }
 
-      await this.followRepository.incrementFollowCounts(
-        followerId,
-        followedId,
-        queryRunner,
-      );
+        if (isNowMutual) {
+          await this.followRepository.updateMutualStatus(
+            followedId,
+            followerId,
+            true,
+            queryRunner,
+          );
+        }
 
-      await queryRunner.commitTransaction();
+        await this.followRepository.incrementFollowCounts(
+          followerId,
+          followedId,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'follow',
+        message: 'Failed to follow user',
+      },
+    );
 
-      await this.redisService.sadd(
-        REDIS_KEYS.FOLLOW.SET(followerId),
-        followedId,
-      );
+    await this.redisService.sadd(REDIS_KEYS.FOLLOW.SET(followerId), followedId);
 
-      this.eventEmitter.emit(
-        'user.followed',
-        new UserFollowedEvent(followerId, followerNickname, followedId),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
+    this.eventEmitter.emit(
+      'user.followed',
+      new UserFollowedEvent(followerId, followerNickname, followedId),
+    );
   }
 
   async unfollow(followerId: string, followedId: string): Promise<void> {
@@ -98,45 +96,42 @@ export class FollowService {
       followedId,
     );
 
-    const queryRunner = await this.followRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      await this.followRepository.unfollow(followerId, followedId, queryRunner);
-
-      if (wasMutual) {
-        await this.followRepository.updateMutualStatus(
-          followedId,
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.followRepository.unfollow(
           followerId,
-          false,
+          followedId,
           queryRunner,
         );
-      }
 
-      await this.followRepository.decrementFollowCounts(
-        followerId,
-        followedId,
-        queryRunner,
-      );
+        if (wasMutual) {
+          await this.followRepository.updateMutualStatus(
+            followedId,
+            followerId,
+            false,
+            queryRunner,
+          );
+        }
 
-      await queryRunner.commitTransaction();
+        await this.followRepository.decrementFollowCounts(
+          followerId,
+          followedId,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'unfollow',
+        message: 'Failed to unfollow user',
+      },
+    );
 
-      await this.redisService.srem(
-        REDIS_KEYS.FOLLOW.SET(followerId),
-        followedId,
-      );
+    await this.redisService.srem(REDIS_KEYS.FOLLOW.SET(followerId), followedId);
 
-      this.eventEmitter.emit(
-        'user.unfollowed',
-        new UserUnfollowedEvent(followerId, followedId),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
+    this.eventEmitter.emit(
+      'user.unfollowed',
+      new UserUnfollowedEvent(followerId, followedId),
+    );
   }
 
   async getFollowers(
@@ -198,14 +193,9 @@ export class FollowService {
   private mapToPaginatedResponse(
     rows: FollowListRow[],
   ): PaginatedFollowResponseDto {
-    const users: FollowUserItemDto[] = rows.map((row) => ({
-      userId: row.public_id,
-      nickname: row.nickname,
-      profileUrl: row.profile_url || undefined,
-      caffeineSum: row.caffeine_sum,
-      visibility: row.visibility,
-      cursorId: row.cursor_id,
-    }));
+    const users: FollowUserItemDto[] = rows.map((row) =>
+      FollowUserItemDto.fromRow(row),
+    );
 
     const nextCursor =
       rows.length === 10 ? rows[rows.length - 1].cursor_id : null;

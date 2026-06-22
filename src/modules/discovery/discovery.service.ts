@@ -9,17 +9,7 @@ import {
 import { RedisService } from '../../providers/redis/redis.service';
 import { BrandService } from '../brand/brand.service';
 import { REDIS_KEYS } from '../../common/constants/redis-keys';
-
-import * as dayjs from 'dayjs';
-import * as utc from 'dayjs/plugin/utc';
-import * as timezone from 'dayjs/plugin/timezone';
-import * as advancedFormat from 'dayjs/plugin/advancedFormat';
-import * as isoWeek from 'dayjs/plugin/isoWeek';
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
-dayjs.extend(advancedFormat);
-dayjs.extend(isoWeek);
+import { DateUtil } from '../../common/utils/date.util';
 
 @Injectable()
 export class DiscoveryService {
@@ -30,7 +20,7 @@ export class DiscoveryService {
   ) {}
 
   async getBrandRanking(): Promise<BrandRankingDto[]> {
-    const fakeKSTNow = dayjs.utc().add(9, 'hour');
+    const fakeKSTNow = DateUtil.nowKst();
     const weeklyKey = REDIS_KEYS.BRAND.RANKING_WEEKLY(
       fakeKSTNow.format('GGGG-WW'),
     );
@@ -79,11 +69,7 @@ export class DiscoveryService {
         const brandId = parseInt(item.value, 10);
         const brandName =
           (await this.brandService.resolveBrandName(brandId)) || 'Unknown';
-        return {
-          brandId,
-          brandName,
-          intakeCount: item.score,
-        };
+        return BrandRankingDto.fromRow(item, brandName);
       }),
     );
   }
@@ -91,21 +77,24 @@ export class DiscoveryService {
   async getDailyPopular(): Promise<FeedPostDto[]> {
     const cacheKey = REDIS_KEYS.DISCOVERY.DAILY_POPULAR;
     return await this.redisService.getOrSet(cacheKey, 900, async () => {
-      return await this.discoveryRepository.findDailyPopular();
+      const rows = await this.discoveryRepository.findDailyPopular();
+      return rows.map((row) => FeedPostDto.fromRow(row));
     });
   }
 
   async getBrandRecentPosts(brandId: number): Promise<FeedPostDto[]> {
     const cacheKey = REDIS_KEYS.DISCOVERY.RECENT(brandId);
     return await this.redisService.getOrSet(cacheKey, 120, async () => {
-      return await this.discoveryRepository.findBrandRecentPosts(brandId);
+      const rows = await this.discoveryRepository.findBrandRecentPosts(brandId);
+      return rows.map((row) => FeedPostDto.fromRow(row));
     });
   }
 
   async getBrandPopularPosts(brandId: number): Promise<FeedPostDto[]> {
     const cacheKey = REDIS_KEYS.DISCOVERY.POPULAR(brandId);
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
-      return await this.discoveryRepository.findBrandPopularPosts(brandId);
+      const rows = await this.discoveryRepository.findBrandPopularPosts(brandId);
+      return rows.map((row) => FeedPostDto.fromRow(row));
     });
   }
 
@@ -114,9 +103,9 @@ export class DiscoveryService {
   ): Promise<BrandPopularMenuDto | null> {
     const cacheKey = REDIS_KEYS.DISCOVERY.POPULAR_MENU(brandId);
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
-      const result =
+      const row =
         await this.discoveryRepository.findWeeklyPopularBrandMenu(brandId);
-      return result || null;
+      return row ? BrandPopularMenuDto.fromRow(row) : null;
     });
   }
 }

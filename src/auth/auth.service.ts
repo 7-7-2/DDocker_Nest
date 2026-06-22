@@ -16,13 +16,19 @@ import { nanoid } from 'nanoid';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ServerConfigName, ServerConfig } from '../config/server.config';
 
+/**
+ * Wrapper type used to circumvent ESM modules circular dependency issue
+ * caused by reflection metadata saving the type of the property.
+ */
+export type WrapperType<T> = T; // WrapperType === Relation
+
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Inject(forwardRef(() => UserService))
-    private readonly userService: UserService,
+    private readonly userService: WrapperType<UserService>,
     private readonly redisService: RedisService,
   ) {}
 

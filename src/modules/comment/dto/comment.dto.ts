@@ -56,6 +56,20 @@ export class CommentResponseDto {
 
   @ApiProperty()
   isDeleted: boolean;
+
+  static fromRow(row: any): CommentResponseDto {
+    const isDeleted = !!row.deleted_at;
+    return {
+      id: row.id,
+      userId: row.user_id,
+      nickname: row.nickname,
+      profileUrl: row.profile_url || undefined,
+      content: isDeleted ? '삭제된 댓글입니다.' : row.content,
+      createdAt: row.created_at,
+      replyCount: Number(row.reply_count || 0),
+      isDeleted,
+    };
+  }
 }
 
 export class ReplyResponseDto {
@@ -82,6 +96,20 @@ export class ReplyResponseDto {
 
   @ApiProperty()
   isDeleted: boolean;
+
+  static fromRow(row: any): ReplyResponseDto {
+    const isDeleted = !!row.deleted_at;
+    return {
+      id: row.id,
+      commentId: row.comment_id,
+      userId: row.user_id,
+      nickname: row.nickname,
+      profileUrl: row.profile_url || undefined,
+      content: isDeleted ? '삭제된 답글입니다.' : row.content,
+      createdAt: row.created_at,
+      isDeleted,
+    };
+  }
 }
 
 export class DeleteCommentDto {

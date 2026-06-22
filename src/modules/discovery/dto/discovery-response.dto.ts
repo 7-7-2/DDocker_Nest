@@ -9,6 +9,14 @@ export class BrandRankingDto {
 
   @ApiProperty({ example: 120 })
   intakeCount: number;
+
+  static fromRow(row: any, brandName: string): BrandRankingDto {
+    return {
+      brandId: Number(row.brandId || row.brand_id),
+      brandName,
+      intakeCount: Number(row.intakeCount || row.score),
+    };
+  }
 }
 
 export class FeedPostDto {
@@ -53,6 +61,25 @@ export class FeedPostDto {
 
   @ApiProperty({ example: 'user_public_id', required: false })
   userId?: string;
+
+  static fromRow(row: any): FeedPostDto {
+    return {
+      postId: row.postId || row.public_id,
+      photo: row.photo,
+      productName: row.productName || row.product_name,
+      brandId: row.brandId || row.brand_id,
+      brandName: row.brandName || row.brand_name,
+      caffeine: row.caffeine,
+      shot: row.shot,
+      likeCount: Number(row.likeCount || row.like_count || 0),
+      commentCount: Number(row.commentCount || row.comment_count || 0),
+      description: row.description,
+      createdAt: row.createdAt || row.created_at,
+      profileUrl: row.profileUrl || row.profile_url,
+      nickname: row.nickname,
+      userId: row.userId || row.user_id,
+    };
+  }
 }
 
 export class BrandPopularMenuDto {
@@ -64,4 +91,12 @@ export class BrandPopularMenuDto {
 
   @ApiProperty({ example: 42 })
   orderCount: number;
+
+  static fromRow(row: any): BrandPopularMenuDto {
+    return {
+      brandId: Number(row.brandId || row.brand_id),
+      productName: row.productName || row.product_name,
+      orderCount: Number(row.orderCount || row.order_count),
+    };
+  }
 }

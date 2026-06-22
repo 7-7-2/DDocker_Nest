@@ -5,9 +5,17 @@ import { PostRepository } from '../post/post.repository';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createCommentRepositoryMock } from '../../test-utils/mocks/comment.repository.mock';
 import { createPostRepositoryMock } from '../../test-utils/mocks/post.repository.mock';
-import { NotFoundException } from '@nestjs/common';
+import { RedisService } from '../../providers/redis/redis.service';
+import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
+import {
+  HttpException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Mock } from '../../test-utils/types';
 import { QueryRunner } from 'typeorm';
+import { TransactionManager } from '../../common/database/transaction.manager';
+import { createTransactionManagerMock } from '../../test-utils/mocks/transaction.manager.mock';
 
 describe('CommentService', () => {
   let service: CommentService;
@@ -15,10 +23,30 @@ describe('CommentService', () => {
   let postRepository: Mock<PostRepository>;
   let eventEmitter: Mock<EventEmitter2>;
   let queryRunner: jest.Mocked<QueryRunner>;
+  let txManager: Mock<TransactionManager>;
 
   beforeEach(async () => {
     const repoMock = createCommentRepositoryMock();
     queryRunner = repoMock.getQueryRunner!() as jest.Mocked<QueryRunner>;
+    txManager = createTransactionManagerMock();
+
+    // Mock txManager.run to use our queryRunner and simulate lifecycle
+    txManager.run!.mockImplementation(async (work, options) => {
+      await queryRunner.startTransaction();
+      try {
+        const result = await work(queryRunner);
+        await queryRunner.commitTransaction();
+        return result;
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException(options?.message);
+      } finally {
+        await queryRunner.release();
+      }
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -30,6 +58,10 @@ describe('CommentService', () => {
         {
           provide: PostRepository,
           useValue: createPostRepositoryMock(),
+        },
+        {
+          provide: TransactionManager,
+          useValue: txManager,
         },
         {
           provide: EventEmitter2,
