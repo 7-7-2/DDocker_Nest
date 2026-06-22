@@ -21,4 +21,16 @@ export class UserResponseDto {
 
   @ApiProperty({ description: '0: Mutual, 1: Public' })
   visibility: number;
+
+  static fromRow(row: any, brandName?: string): UserResponseDto {
+    return {
+      userId: row.public_id || row.user_id || row.id,
+      nickname: row.nickname || '',
+      profileUrl: row.profile_url || undefined,
+      aboutMe: row.bio || row.about_me || undefined,
+      brand: brandName || row.brand || undefined,
+      sum: Number(row.sum || row.caffeine_sum || 0),
+      visibility: row.visibility ?? 1,
+    };
+  }
 }

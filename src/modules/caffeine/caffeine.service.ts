@@ -30,17 +30,16 @@ import {
 import { RedisService } from '../../providers/redis/redis.service';
 import { PostService } from '../post/post.service';
 import { REDIS_KEYS } from '../../common/constants/redis-keys';
+import { DateUtil } from '../../common/utils/date.util';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
-import * as dayjs from 'dayjs';
-import * as utc from 'dayjs/plugin/utc';
-import * as timezone from 'dayjs/plugin/timezone';
-import * as advancedFormat from 'dayjs/plugin/advancedFormat';
-import * as isoWeek from 'dayjs/plugin/isoWeek';
+import dayjs from 'dayjs';
 
-dayjs.extend(utc);
-dayjs.extend(timezone);
-dayjs.extend(advancedFormat);
-dayjs.extend(isoWeek);
+/**
+ * Wrapper type used to circumvent ESM modules circular dependency issue
+ * caused by reflection metadata saving the type of the property.
+ */
+export type WrapperType<T> = T; // WrapperType === Relation
 
 @Injectable()
 export class CaffeineService {
@@ -51,7 +50,8 @@ export class CaffeineService {
     private readonly brandService: BrandService,
     private readonly redisService: RedisService,
     @Inject(forwardRef(() => PostService))
-    private readonly postService: PostService,
+    private readonly postService: WrapperType<PostService>,
+    private readonly txManager: TransactionManager,
   ) {}
 
   async logIntake(
@@ -64,56 +64,57 @@ export class CaffeineService {
       throw new BadRequestException(`Invalid brand: ${dto.brandId}`);
     }
 
-    const queryRunner =
-      externalQueryRunner || (await this.caffeineRepository.getQueryRunner());
-
-    if (!externalQueryRunner) {
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
-    }
-
-    try {
-      const intakeId = await this.caffeineRepository.insertIntake(
-        {
-          user_id: userId,
-          brand_id: brandId,
-          caffeine: dto.caffeine,
-          size: dto.size,
-          shot: dto.shot ?? 0,
-          intensity: dto.intensity ?? '기본',
-          product_name: dto.productName,
-        },
-        queryRunner,
-      );
-
-      await this.caffeineRepository.updateUserStatsSum(
+    if (externalQueryRunner) {
+      return await this.performLogIntake(
         userId,
-        dto.caffeine,
-        queryRunner,
+        dto,
+        brandId,
+        externalQueryRunner,
       );
-
-      if (!externalQueryRunner) {
-        await queryRunner.commitTransaction();
-      }
-
-      await this.invalidateCaffeineCaches(userId);
-      await this.updateBrandRanking(brandId, 1);
-
-      this.logger.log(`Intake ${intakeId} logged for user ${userId}`);
-      return intakeId;
-    } catch (error) {
-      if (!externalQueryRunner) {
-        await queryRunner.rollbackTransaction();
-      }
-      this.logger.error(`Failed to log intake for user ${userId}`, error);
-      throw new InternalServerErrorException(
-        'Failed to record caffeine intake',
-      );
-    } finally {
-      if (!externalQueryRunner) {
-        await queryRunner.release();
-      }
     }
+
+    return await this.txManager.run(
+      async (queryRunner) => {
+        return await this.performLogIntake(userId, dto, brandId, queryRunner);
+      },
+      {
+        logger: this.logger,
+        context: 'logIntake',
+        message: 'Failed to record caffeine intake',
+      },
+    );
+  }
+
+  private async performLogIntake(
+    userId: string,
+    dto: CreateCaffeineDto,
+    brandId: number,
+    queryRunner: QueryRunner,
+  ): Promise<number> {
+    const intakeId = await this.caffeineRepository.insertIntake(
+      {
+        user_id: userId,
+        brand_id: brandId,
+        caffeine: dto.caffeine,
+        size: dto.size,
+        shot: dto.shot ?? 0,
+        intensity: dto.intensity ?? '기본',
+        product_name: dto.productName,
+      },
+      queryRunner,
+    );
+
+    await this.caffeineRepository.updateUserStatsSum(
+      userId,
+      dto.caffeine,
+      queryRunner,
+    );
+
+    await this.invalidateCaffeineCaches(userId);
+    await this.updateBrandRanking(brandId, 1);
+
+    this.logger.log(`Intake ${intakeId} logged for user ${userId}`);
+    return intakeId;
   }
 
   async deleteIntake(userId: string, intakeId: number): Promise<void> {
@@ -132,36 +133,26 @@ export class CaffeineService {
       return await this.postService.deletePost(userId, postId);
     }
 
-    const queryRunner = await this.caffeineRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.caffeineRepository.softDeleteIntake(intakeId, queryRunner);
+        await this.caffeineRepository.updateUserStatsSum(
+          userId,
+          -intake.caffeine,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'deleteIntake',
+        message: 'Failed to delete intake',
+      },
+    );
 
-    try {
-      await this.caffeineRepository.softDeleteIntake(intakeId, queryRunner);
-      await this.caffeineRepository.updateUserStatsSum(
-        userId,
-        -intake.caffeine,
-        queryRunner,
-      );
+    await this.invalidateCaffeineCaches(userId, intake.created_at);
+    await this.updateBrandRanking(intake.brand_id, -1, intake.created_at);
 
-      await queryRunner.commitTransaction();
-
-      await this.invalidateCaffeineCaches(userId, intake.created_at);
-      await this.updateBrandRanking(intake.brand_id, -1, intake.created_at);
-
-      this.logger.log(
-        `Standalone intake ${intakeId} deleted for user ${userId}`,
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error(
-        `Failed to delete standalone intake ${intakeId}`,
-        error,
-      );
-      throw new InternalServerErrorException('Failed to delete intake');
-    } finally {
-      await queryRunner.release();
-    }
+    this.logger.log(`Standalone intake ${intakeId} deleted for user ${userId}`);
   }
 
   async getPostByIntakeId(intakeId: number): Promise<string | null> {
@@ -172,12 +163,9 @@ export class CaffeineService {
     userId: string,
     date?: Date | dayjs.Dayjs,
   ) {
-    const targetDate = date
-      ? dayjs(date).add(9, 'hour')
-      : dayjs.utc().add(9, 'hour');
+    const targetDate = date ? DateUtil.toKst(date) : DateUtil.nowKst();
 
-    const calendarMonthKey = targetDate.format('YYYY-MM');
-    const dayKey = targetDate.format('YYYY-MM-DD');
+    const calendarMonthKey = DateUtil.getMonthKey(targetDate);
 
     const keys = [
       REDIS_KEYS.CAFFEINE.TODAY(userId),
@@ -191,14 +179,13 @@ export class CaffeineService {
   async getTodayConsumption(userId: string): Promise<TodayCaffeineResponseDto> {
     const cacheKey = REDIS_KEYS.CAFFEINE.TODAY(userId);
     return await this.redisService.getOrSet(cacheKey, 10800, async () => {
-      const fakeKSTNow = dayjs.utc().add(9, 'hour');
-      const start = fakeKSTNow.startOf('day');
-      const end = fakeKSTNow.endOf('day');
+      const fakeKSTNow = DateUtil.nowKst();
+      const { start, end } = DateUtil.getDayRange(fakeKSTNow);
 
       const row = await this.caffeineRepository.findTodayConsumption(
         userId,
-        this.formatDateForDb(start),
-        this.formatDateForDb(end),
+        DateUtil.formatForDb(start),
+        DateUtil.formatForDb(end),
       );
 
       if (!row) {
@@ -218,8 +205,8 @@ export class CaffeineService {
     dateStr: string,
     unit: 'weekly' | 'monthly',
   ): Promise<IntakeTrendResponseDto> {
-    const anchor = dayjs.utc(dateStr).add(9, 'hour');
-    const dayKey = anchor.format('YYYY-MM-DD');
+    const anchor = DateUtil.toKst(dateStr);
+    const dayKey = DateUtil.getDayKey(anchor);
     const cacheKey = REDIS_KEYS.CAFFEINE.ANALYSIS(userId, unit, dayKey);
 
     return await this.redisService.getOrSet(cacheKey, 3600, async () => {
@@ -228,13 +215,24 @@ export class CaffeineService {
       const globalStart = context.chartRanges[0].start;
       const globalEnd = context.currentRange.end;
 
-      const intakes = await this.caffeineRepository.findDetailedIntakesInRange(
-        userId,
-        this.formatDateForDb(globalStart),
-        this.formatDateForDb(globalEnd),
-      );
+      const allIntakes =
+        await this.caffeineRepository.findDetailedIntakesInRange(
+          userId,
+          DateUtil.formatForDb(globalStart),
+          DateUtil.formatForDb(globalEnd),
+        );
 
-      return new IntakeTrendBuilder(context, intakes)
+      const currentIntakes = allIntakes.filter((i) => {
+        const d = DateUtil.toKst(i.created_at);
+        return (
+          (d.isAfter(context.currentRange.start) ||
+            d.isSame(context.currentRange.start)) &&
+          (d.isBefore(context.currentRange.end) ||
+            d.isSame(context.currentRange.end))
+        );
+      });
+
+      return new IntakeTrendBuilder(context, currentIntakes, allIntakes)
         .buildChart()
         .buildMetrics()
         .buildThresholds()
@@ -266,8 +264,8 @@ export class CaffeineService {
     userId: string,
     dateStr: string,
   ): Promise<CaffeineMonthlyViewDto> {
-    const fakeKSTDate = dayjs.utc(dateStr).add(9, 'hour');
-    const monthKey = fakeKSTDate.format('YYYY-MM');
+    const fakeKSTDate = DateUtil.toKst(dateStr);
+    const monthKey = DateUtil.getMonthKey(fakeKSTDate);
     const cacheKey = REDIS_KEYS.CAFFEINE.MONTHLY(userId, monthKey);
 
     return await this.redisService.getOrSet(cacheKey, 86400, async () => {
@@ -304,18 +302,15 @@ export class CaffeineService {
       return { summary, details };
     });
   }
+
   private getMonthRange(dateStr: string): { start: string; end: string } {
-    const base = dayjs.utc(dateStr).add(9, 'hour');
+    const base = DateUtil.toKst(dateStr);
     if (!base.isValid()) throw new InternalServerErrorException('Invalid date');
 
     return {
-      start: this.formatDateForDb(base.startOf('month')),
-      end: this.formatDateForDb(base.endOf('month')),
+      start: DateUtil.formatForDb(base.startOf('month')),
+      end: DateUtil.formatForDb(base.endOf('month')),
     };
-  }
-
-  private formatDateForDb(date: Date | dayjs.Dayjs): string {
-    return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
   }
 
   async updateBrandRanking(
@@ -338,9 +333,11 @@ export class CaffeineService {
   }
 
   private getBrandRankingKeys(date?: Date | dayjs.Dayjs) {
-    const fakeKSTNow = date ? dayjs(date) : dayjs.utc().add(9, 'hour');
-    const weeklyKey = `brand:ranking:weekly:${fakeKSTNow.format('GGGG-WW')}`;
-    const allKey = 'brand:ranking:all';
+    const fakeKSTNow = date ? DateUtil.toKst(date) : DateUtil.nowKst();
+    const weeklyKey = REDIS_KEYS.BRAND.RANKING_WEEKLY(
+      fakeKSTNow.format('GGGG-WW'),
+    );
+    const allKey = REDIS_KEYS.BRAND.RANKING_ALL;
 
     return { allKey, weeklyKey };
   }

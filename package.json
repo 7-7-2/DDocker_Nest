@@ -63,6 +63,7 @@
     "@nestjs/testing": "^11.1.17",
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.15.21",
+    "@swc/jest": "^0.2.39",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/ioredis": "^5.0.0",

@@ -1,13 +1,5 @@
-import * as dayjs from 'dayjs';
-import * as utc from 'dayjs/plugin/utc';
-import * as timezone from 'dayjs/plugin/timezone';
-import * as advancedFormat from 'dayjs/plugin/advancedFormat';
-import * as isoWeek from 'dayjs/plugin/isoWeek';
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
-dayjs.extend(advancedFormat);
-dayjs.extend(isoWeek);
+import dayjs from 'dayjs';
+import { DateUtil } from '../../common/utils/date.util';
 
 import { IntakeTrendResponseDto } from './dto/intake-trend.dto';
 
@@ -29,27 +21,17 @@ export interface DetailedIntake {
 
 export class IntakeTrendBuilder {
   private result: Partial<IntakeTrendResponseDto> = {};
-  private currentIntakes: DetailedIntake[];
 
   constructor(
     private readonly context: IntakeTrendContext,
+    private readonly currentIntakes: DetailedIntake[],
     private readonly allIntakes: DetailedIntake[],
-  ) {
-    this.currentIntakes = allIntakes.filter((i) => {
-      const d = dayjs(i.created_at).add(9, 'hour');
-      return (
-        (d.isAfter(context.currentRange.start) ||
-          d.isSame(context.currentRange.start)) &&
-        (d.isBefore(context.currentRange.end) ||
-          d.isSame(context.currentRange.end))
-      );
-    });
-  }
+  ) {}
 
   buildChart(): this {
     this.result.chart = this.context.chartRanges.map((range) => {
       const periodIntakes = this.allIntakes.filter((intake) => {
-        const d = dayjs(intake.created_at).add(9, 'hour');
+        const d = DateUtil.toKst(intake.created_at);
         return (
           (d.isAfter(range.start) || d.isSame(range.start)) &&
           (d.isBefore(range.end) || d.isSame(range.end))
@@ -75,7 +57,7 @@ export class IntakeTrendBuilder {
   buildMetrics(): this {
     const dailySumMap: Record<string, number> = {};
     this.currentIntakes.forEach((i) => {
-      const day = dayjs(i.created_at).add(9, 'hour').format('YYYY-MM-DD');
+      const day = DateUtil.getDayKey(DateUtil.toKst(i.created_at));
       dailySumMap[day] = (dailySumMap[day] || 0) + i.caffeine;
     });
 
@@ -95,7 +77,7 @@ export class IntakeTrendBuilder {
   buildThresholds(): this {
     const dailySumMap: Record<string, number> = {};
     this.currentIntakes.forEach((i) => {
-      const day = dayjs(i.created_at).add(9, 'hour').format('YYYY-MM-DD');
+      const day = DateUtil.getDayKey(DateUtil.toKst(i.created_at));
       dailySumMap[day] = (dailySumMap[day] || 0) + i.caffeine;
     });
 

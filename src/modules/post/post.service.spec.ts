@@ -8,14 +8,17 @@ import { BrandService } from '../brand/brand.service';
 import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
 import { createPostRepositoryMock } from '../../test-utils/mocks/post.repository.mock';
 import { createCaffeineRepositoryMock } from '../../test-utils/mocks/caffeine.repository.mock';
+import { createTransactionManagerMock } from '../../test-utils/mocks/transaction.manager.mock';
 import { createPostDetailRowFixture } from '../../test-utils/fixtures/post.fixture';
 import {
   BadRequestException,
+  HttpException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { Mock } from '../../test-utils/types';
 import { QueryRunner } from 'typeorm';
 import { CreatePostDto } from './dto/create-post.dto';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
 describe('PostService', () => {
   let service: PostService;
@@ -24,11 +27,31 @@ describe('PostService', () => {
   let caffeineService: Mock<CaffeineService>;
   let caffeineRepository: Mock<CaffeineRepository>;
   let brandService: Mock<BrandService>;
+  let txManager: Mock<TransactionManager>;
   let queryRunner: jest.Mocked<QueryRunner>;
 
   beforeEach(async () => {
     const repoMock = createPostRepositoryMock();
     queryRunner = repoMock.getQueryRunner!() as jest.Mocked<QueryRunner>;
+    txManager = createTransactionManagerMock();
+
+    // Mock txManager.run to use our queryRunner and simulate lifecycle
+    txManager.run!.mockImplementation(async (work, options) => {
+      await queryRunner.startTransaction();
+      try {
+        const result = await work(queryRunner);
+        await queryRunner.commitTransaction();
+        return result;
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException(options?.message);
+      } finally {
+        await queryRunner.release();
+      }
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -55,6 +78,10 @@ describe('PostService', () => {
             resolveBrandId: jest.fn(),
             resolveBrandName: jest.fn(),
           },
+        },
+        {
+          provide: TransactionManager,
+          useValue: txManager,
         },
       ],
     }).compile();

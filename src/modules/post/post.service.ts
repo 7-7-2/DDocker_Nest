@@ -10,7 +10,6 @@ import {
   PostResponseDto,
   PaginatedPostResponseDto,
 } from './dto/post-response.dto';
-import { PostDetailRow, PostFeedRow } from './entities/post-query.entity';
 import { RedisService } from '../../providers/redis/redis.service';
 import { CaffeineService } from '../caffeine/caffeine.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -19,7 +18,8 @@ import { CaffeineRepository } from '../caffeine/caffeine.repository';
 import { UserProfilePostsResponseDto } from '../user/dto/user-profile-posts.dto';
 import { BrandService } from '../brand/brand.service';
 import { REDIS_KEYS } from '../../common/constants/redis-keys';
-import * as dayjs from 'dayjs';
+import { DateUtil } from '../../common/utils/date.util';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
 @Injectable()
 export class PostService {
@@ -31,68 +31,68 @@ export class PostService {
     private readonly caffeineService: CaffeineService,
     private readonly caffeineRepository: CaffeineRepository,
     private readonly brandService: BrandService,
+    private readonly txManager: TransactionManager,
   ) {}
 
   async registerPost(userId: string, dto: CreatePostDto): Promise<void> {
-    const brandId = await this.brandService.resolveBrandId(dto.brand);
+    const brandId = await this.validateBrand(dto.brand);
+
+    await this.txManager.run(
+      async (queryRunner) => {
+        const intakeId = await this.caffeineService.logIntake(
+          userId,
+          {
+            brandId,
+            caffeine: dto.caffeine,
+            productName: dto.productName,
+            size: dto.size,
+            shot: dto.shot,
+            intensity: dto.intensity,
+          },
+          queryRunner,
+        );
+
+        await this.postRepository.insertPost(
+          {
+            user_id: userId,
+            caffeine_intake_id: intakeId,
+            photo: dto.photo,
+            public_id: dto.postId,
+            description: dto.description,
+            visibility: dto.visibility,
+          },
+          queryRunner,
+        );
+
+        await this.postRepository.insertPostStats(dto.postId, queryRunner);
+        await this.postRepository.updateUserStatsPostCount(
+          userId,
+          1,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'registerPost',
+        message: 'Failed to register post',
+      },
+    );
+
+    await this.redisService.del([
+      REDIS_KEYS.USER.STATS(userId),
+      REDIS_KEYS.USER.POSTS(userId, 'grid'),
+      REDIS_KEYS.USER.POSTS(userId, 'list'),
+    ]);
+
+    this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
+  }
+
+  private async validateBrand(brandName: string): Promise<number> {
+    const brandId = await this.brandService.resolveBrandId(brandName);
     if (!brandId) {
-      throw new BadRequestException(`Invalid brand: ${dto.brand}`);
+      throw new BadRequestException(`Invalid brand: ${brandName}`);
     }
-
-    const queryRunner = await this.postRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const intakeId = await this.caffeineService.logIntake(
-        userId,
-        {
-          brandId: brandId,
-          caffeine: dto.caffeine,
-          productName: dto.productName,
-          size: dto.size,
-          shot: dto.shot,
-          intensity: dto.intensity,
-        },
-        queryRunner,
-      );
-
-      await this.postRepository.insertPost(
-        {
-          user_id: userId,
-          caffeine_intake_id: intakeId,
-          photo: dto.photo,
-          public_id: dto.postId,
-          description: dto.description,
-          visibility: dto.visibility,
-        },
-        queryRunner,
-      );
-
-      await this.postRepository.insertPostStats(dto.postId, queryRunner);
-
-      await this.postRepository.updateUserStatsPostCount(
-        userId,
-        1,
-        queryRunner,
-      );
-
-      await queryRunner.commitTransaction();
-
-      await this.redisService.del([
-        REDIS_KEYS.USER.STATS(userId),
-        REDIS_KEYS.USER.POSTS(userId, 'grid'),
-        REDIS_KEYS.USER.POSTS(userId, 'list'),
-      ]);
-
-      this.logger.log(`Post ${dto.postId} registered for user ${userId}`);
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error(`Failed to register post for user ${userId}`, error);
-      throw new InternalServerErrorException('Failed to register post');
-    } finally {
-      await queryRunner.release();
-    }
+    return brandId;
   }
 
   async getPostByIntakeId(intakeId: number): Promise<string | null> {
@@ -113,61 +113,56 @@ export class PostService {
       throw new InternalServerErrorException('Unauthorized post deletion');
     }
 
-    const queryRunner = await this.postRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.postRepository.softDeletePost(postId, queryRunner);
+        await this.caffeineRepository.softDeleteIntake(
+          post.caffeine_intake_id,
+          queryRunner,
+        );
+        await this.caffeineRepository.updateUserStatsSum(
+          userId,
+          -post.caffeine,
+          queryRunner,
+        );
+        await this.postRepository.updateUserStatsPostCount(
+          userId,
+          -1,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'deletePost',
+        message: 'Failed to delete post',
+      },
+    );
 
-    try {
-      await this.postRepository.softDeletePost(postId, queryRunner);
-      await this.caffeineRepository.softDeleteIntake(
-        post.caffeine_intake_id,
-        queryRunner,
-      );
-      await this.caffeineRepository.updateUserStatsSum(
-        userId,
-        -post.caffeine,
-        queryRunner,
-      );
-      await this.postRepository.updateUserStatsPostCount(
-        userId,
-        -1,
-        queryRunner,
-      );
+    // Clear common post caches
+    await this.redisService.del([
+      REDIS_KEYS.USER.STATS(userId),
+      REDIS_KEYS.POST.DETAIL(postId),
+      REDIS_KEYS.POST.STATS(postId),
+      REDIS_KEYS.USER.POSTS(userId, 'grid'),
+      REDIS_KEYS.USER.POSTS(userId, 'list'),
+    ]);
 
-      await queryRunner.commitTransaction();
+    // NEW: Clear caffeine caches to update main page / stats immediately
+    const intakeDate = DateUtil.toKst(post.created_at);
+    const monthKey = DateUtil.getMonthKey(intakeDate);
+    await this.redisService.del([
+      REDIS_KEYS.CAFFEINE.TODAY(userId),
+      REDIS_KEYS.CAFFEINE.MONTHLY(userId, monthKey),
+      REDIS_KEYS.USER.PROFILE(userId),
+    ]);
 
-      // Clear common post caches
-      await this.redisService.del([
-        REDIS_KEYS.USER.STATS(userId),
-        REDIS_KEYS.POST.DETAIL(postId),
-        REDIS_KEYS.POST.STATS(postId),
-        REDIS_KEYS.USER.POSTS(userId, 'grid'),
-        REDIS_KEYS.USER.POSTS(userId, 'list'),
-      ]);
+    await this.caffeineService.updateBrandRanking(
+      post.brand_id,
+      -1,
+      post.created_at,
+    );
 
-      // NEW: Clear caffeine caches to update main page / stats immediately
-      const intakeDate = dayjs(post.created_at).add(9, 'hour');
-      const monthKey = intakeDate.format('YYYY-MM');
-      await this.redisService.del([
-        REDIS_KEYS.CAFFEINE.TODAY(userId),
-        REDIS_KEYS.CAFFEINE.MONTHLY(userId, monthKey),
-        REDIS_KEYS.USER.PROFILE(userId),
-      ]);
-
-      await this.caffeineService.updateBrandRanking(
-        post.brand_id,
-        -1,
-        post.created_at,
-      );
-
-      this.logger.log(`Post ${postId} deleted for user ${userId}`);
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error(`Failed to delete post ${postId}`, error);
-      throw new InternalServerErrorException('Failed to delete post');
-    } finally {
-      await queryRunner.release();
-    }
+    this.logger.log(`Post ${postId} deleted for user ${userId}`);
   }
 
   async patchPost(
@@ -198,7 +193,9 @@ export class PostService {
       const row = await this.postRepository.findPostDetail(postId);
       if (!row) throw new NotFoundException('Post not found');
 
-      return await this.mapDetailRowToDto(row, { ...stats });
+      const brandName =
+        (await this.brandService.resolveBrandName(row.brand_id)) || undefined;
+      return PostResponseDto.fromRow(row, stats, brandName);
     });
   }
 
@@ -220,17 +217,19 @@ export class PostService {
         );
 
         const posts = await Promise.all(
-          rows.map((row) => this.mapDetailRowToDto(row)),
+          rows.map(async (row) => {
+            const brandName =
+              (await this.brandService.resolveBrandName(row.brand_id)) ||
+              undefined;
+            return PostResponseDto.fromRow(row, undefined, brandName);
+          }),
         );
         const nextCursor =
           rows.length === 10
             ? rows[rows.length - 1].created_at.toISOString()
             : null;
 
-        return {
-          posts,
-          nextCursor,
-        };
+        return { posts, nextCursor };
       });
     }
 
@@ -240,17 +239,18 @@ export class PostService {
     );
 
     const posts = await Promise.all(
-      rows.map((row) => this.mapDetailRowToDto(row)),
+      rows.map(async (row) => {
+        const brandName =
+          (await this.brandService.resolveBrandName(row.brand_id)) || undefined;
+        return PostResponseDto.fromRow(row, undefined, brandName);
+      }),
     );
     const nextCursor =
       rows.length === 10
         ? rows[rows.length - 1].created_at.toISOString()
         : null;
 
-    return {
-      posts,
-      nextCursor,
-    };
+    return { posts, nextCursor };
   }
 
   async getStatsWithFallback(
@@ -322,61 +322,26 @@ export class PostService {
         cursor,
       );
 
+      const listPosts = await Promise.all(
+        rows.map(async (row) => {
+          const brandName = await this.brandService.resolveBrandName(
+            row.brand_id,
+          );
+          return PostResponseDto.fromRow(
+            row,
+            undefined,
+            brandName || undefined,
+          );
+        }),
+      );
+
       return {
-        listPosts: await Promise.all(
-          rows.map(async (row) => ({
-            postId: row.public_id,
-            visibility: row.visibility,
-            caffeine: row.caffeine,
-            description: row.description,
-            photo: row.photo,
-            productName: row.product_name,
-            brandId: row.brand_id,
-            brand:
-              (await this.brandService.resolveBrandName(row.brand_id)) ||
-              undefined,
-            createdAt: row.created_at,
-          })),
-        ),
+        listPosts,
         nextCursor:
           rows.length === limit
             ? rows[rows.length - 1].created_at.toISOString()
             : null,
       };
     }
-  }
-
-  private async mapDetailRowToDto(
-    row: PostDetailRow | PostFeedRow,
-    stats?: { likeCount: number; commentCount: number },
-  ): Promise<PostResponseDto> {
-    const likeCount = stats ? stats.likeCount : (row as PostFeedRow).like_count;
-    const commentCount = stats
-      ? stats.commentCount
-      : (row as PostFeedRow).comment_count;
-
-    const brandName = await this.brandService.resolveBrandName(row.brand_id);
-
-    return {
-      postId: row.public_id,
-      userId: row.user_id,
-      nickname: row.nickname,
-      profileUrl: row.profile_url,
-      photo: row.photo,
-      description: row.description,
-      createdAt: row.created_at,
-      likeCount: likeCount || 0,
-      commentCount: commentCount || 0,
-      visibility: row.visibility,
-      brandId: row.brand_id,
-      brand: brandName || undefined,
-      caffeine: row.caffeine,
-      productName: row.product_name,
-      size: row.size,
-      shot: row.shot,
-      intensity: row.intensity,
-      userSum: row.user_sum || 0,
-      cursorId: row.id,
-    };
   }
 }

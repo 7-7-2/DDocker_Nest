@@ -7,11 +7,14 @@ import { AuthService } from '../../auth/auth.service';
 import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
 import { createUserRepositoryMock } from '../../test-utils/mocks/user.repository.mock';
 import { createUserRowFixture } from '../../test-utils/fixtures/user.fixture';
+import { TransactionManager } from '../../common/database/transaction.manager';
+import { createTransactionManagerMock } from '../../test-utils/mocks/transaction.manager.mock';
 import {
   UnauthorizedException,
   BadRequestException,
   NotFoundException,
   InternalServerErrorException,
+  HttpException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Mock } from '../../test-utils/types';
@@ -24,12 +27,31 @@ describe('UserService', () => {
   let brandService: Mock<BrandService>;
   let authService: Mock<AuthService>;
   let queryRunner: jest.Mocked<QueryRunner>;
+  let txManager: Mock<TransactionManager>;
 
   const mockUser = createUserRowFixture();
 
   beforeEach(async () => {
     const repoMock = createUserRepositoryMock();
     queryRunner = repoMock.getQueryRunner!() as jest.Mocked<QueryRunner>;
+    txManager = createTransactionManagerMock();
+
+    txManager.run!.mockImplementation(async (work, options) => {
+      await queryRunner.startTransaction();
+      try {
+        const result = await work(queryRunner);
+        await queryRunner.commitTransaction();
+        return result;
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException(options?.message);
+      } finally {
+        await queryRunner.release();
+      }
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -37,6 +59,10 @@ describe('UserService', () => {
         {
           provide: UserRepository,
           useValue: repoMock,
+        },
+        {
+          provide: TransactionManager,
+          useValue: txManager,
         },
         { provide: RedisService, useValue: createRedisServiceMock() },
         {
@@ -61,7 +87,6 @@ describe('UserService', () => {
     brandService = module.get(BrandService);
     authService = module.get(AuthService);
 
-    // CRITICAL: Ensure the mock provided to Nest returns the EXACT same instance we verify
     userRepository.getQueryRunner!.mockReturnValue(queryRunner);
   });
 
@@ -109,7 +134,6 @@ describe('UserService', () => {
 
       const result = await service.setUserInit(dto);
 
-      expect(queryRunner.connect).toHaveBeenCalled();
       expect(queryRunner.startTransaction).toHaveBeenCalled();
       expect(userRepository.insertUser).toHaveBeenCalledWith(
         expect.objectContaining({

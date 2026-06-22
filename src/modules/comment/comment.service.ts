@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { CommentRepository } from './comment.repository';
 import {
@@ -12,10 +13,6 @@ import {
   DeleteCommentDto,
   DeleteReplyDto,
 } from './dto/comment.dto';
-import {
-  CommentWithAuthorRow,
-  ReplyWithAuthorRow,
-} from './entities/comment.entity';
 import { PostRepository } from '../post/post.repository';
 import { RedisService } from '../../providers/redis/redis.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -26,14 +23,18 @@ import {
   CommentDeletedEvent,
   ReplyDeletedEvent,
 } from '../../common/events/interaction.events';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
 @Injectable()
 export class CommentService {
+  private readonly logger = new Logger(CommentService.name);
+
   constructor(
     private readonly commentRepository: CommentRepository,
     private readonly postRepository: PostRepository,
     private readonly redisService: RedisService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly txManager: TransactionManager,
   ) {}
 
   async createComment(
@@ -46,148 +47,131 @@ export class CommentService {
       throw new NotFoundException('Post not found');
     }
 
-    const queryRunner = await this.commentRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.commentRepository.insertComment(
+          {
+            user_id: userId,
+            post_id: dto.postId,
+            content: dto.content,
+          },
+          queryRunner,
+        );
 
-    try {
-      await this.commentRepository.insertComment(
-        {
-          user_id: userId,
-          post_id: dto.postId,
-          content: dto.content,
-        },
-        queryRunner,
-      );
-
-      await this.commentRepository.incrementCommentCount(
-        dto.postId,
-        queryRunner,
-      );
-
-      await queryRunner.commitTransaction();
-
-      this.eventEmitter.emit(
-        'comment.created',
-        new CommentCreatedEvent(
-          userId,
-          commenterNickname,
+        await this.commentRepository.incrementCommentCount(
           dto.postId,
-          post.user_id,
-          dto.content,
-        ),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      if (error instanceof NotFoundException) throw error;
-      throw new InternalServerErrorException('Failed to add comment');
-    } finally {
-      await queryRunner.release();
-    }
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'createComment',
+        message: 'Failed to add comment',
+      },
+    );
+
+    this.eventEmitter.emit(
+      'comment.created',
+      new CommentCreatedEvent(
+        userId,
+        commenterNickname,
+        dto.postId,
+        post.user_id,
+        dto.content,
+      ),
+    );
   }
 
   async createReply(userId: string, dto: CreateReplyDto): Promise<void> {
-    const queryRunner = await this.commentRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.commentRepository.insertReply(
+          {
+            user_id: userId,
+            comment_id: dto.commentId,
+            post_id: dto.postId,
+            content: dto.content,
+          },
+          queryRunner,
+        );
 
-    try {
-      await this.commentRepository.insertReply(
-        {
-          user_id: userId,
-          comment_id: dto.commentId,
-          post_id: dto.postId,
-          content: dto.content,
-        },
-        queryRunner,
-      );
-
-      await this.commentRepository.incrementCommentCount(
-        dto.postId,
-        queryRunner,
-      );
-
-      await queryRunner.commitTransaction();
-
-      this.eventEmitter.emit(
-        'reply.created',
-        new ReplyCreatedEvent(
-          userId,
-          '', // nickname not strictly required here based on payload but good to have
+        await this.commentRepository.incrementCommentCount(
           dto.postId,
-          dto.commentId,
-          dto.content,
-        ),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw new InternalServerErrorException('Failed to add reply');
-    } finally {
-      await queryRunner.release();
-    }
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'createReply',
+        message: 'Failed to add reply',
+      },
+    );
+
+    this.eventEmitter.emit(
+      'reply.created',
+      new ReplyCreatedEvent(
+        userId,
+        '', // nickname not strictly required here based on payload but good to have
+        dto.postId,
+        dto.commentId,
+        dto.content,
+      ),
+    );
   }
 
   async deleteComment(userId: string, dto: DeleteCommentDto): Promise<void> {
-    const queryRunner = await this.commentRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.commentRepository.softDeleteComment(
+          dto.commentId,
+          dto.postId,
+          queryRunner,
+        );
 
-    try {
-      await this.commentRepository.softDeleteComment(
-        dto.commentId,
-        dto.postId,
-        queryRunner,
-      );
+        await this.commentRepository.decrementCommentCount(
+          dto.postId,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'deleteComment',
+        message: 'Failed to delete comment',
+      },
+    );
 
-      await this.commentRepository.decrementCommentCount(
-        dto.postId,
-        queryRunner,
-      );
-
-      await queryRunner.commitTransaction();
-
-      this.eventEmitter.emit(
-        'comment.deleted',
-        new CommentDeletedEvent(dto.postId, dto.commentId),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw new InternalServerErrorException('Failed to delete comment');
-    } finally {
-      await queryRunner.release();
-    }
+    this.eventEmitter.emit(
+      'comment.deleted',
+      new CommentDeletedEvent(dto.postId, dto.commentId),
+    );
   }
 
   async deleteReply(userId: string, dto: DeleteReplyDto): Promise<void> {
-    const queryRunner = await this.commentRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.commentRepository.softDeleteReply(
+          dto.replyId,
+          dto.commentId,
+          dto.postId,
+          queryRunner,
+        );
 
-    try {
-      await this.commentRepository.softDeleteReply(
-        dto.replyId,
-        dto.commentId,
-        dto.postId,
-        queryRunner,
-      );
+        await this.commentRepository.decrementCommentCount(
+          dto.postId,
+          queryRunner,
+        );
+      },
+      {
+        logger: this.logger,
+        context: 'deleteReply',
+        message: 'Failed to delete reply',
+      },
+    );
 
-      await this.commentRepository.decrementCommentCount(
-        dto.postId,
-        queryRunner,
-      );
-
-      await queryRunner.commitTransaction();
-
-      this.eventEmitter.emit(
-        'reply.deleted',
-        new ReplyDeletedEvent(dto.postId, dto.commentId),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw new InternalServerErrorException('Failed to delete reply');
-    } finally {
-      await queryRunner.release();
-    }
+    this.eventEmitter.emit(
+      'reply.deleted',
+      new ReplyDeletedEvent(dto.postId, dto.commentId),
+    );
   }
 
   async getCommentsByPost(postId: string): Promise<CommentResponseDto[]> {
@@ -196,7 +180,7 @@ export class CommentService {
       300,
       async () => {
         const rows = await this.commentRepository.findCommentsByPost(postId);
-        return rows.map((row) => this.mapCommentRowToDto(row));
+        return rows.map((row) => CommentResponseDto.fromRow(row));
       },
     );
   }
@@ -208,10 +192,11 @@ export class CommentService {
       async () => {
         const rows =
           await this.commentRepository.findRepliesByComment(commentId);
-        return rows.map((row) => this.mapReplyRowToDto(row));
+        return rows.map((row) => ReplyResponseDto.fromRow(row));
       },
     );
   }
+
   async checkDeletionPermission(
     type: 'comment' | 'reply',
     id: number,
@@ -222,33 +207,5 @@ export class CommentService {
       id,
       userId,
     );
-  }
-
-  private mapCommentRowToDto(row: CommentWithAuthorRow): CommentResponseDto {
-    const isDeleted = row.deleted_at !== null;
-    return {
-      id: row.id,
-      userId: row.user_id,
-      nickname: row.nickname,
-      profileUrl: row.profile_url || undefined,
-      content: isDeleted ? '삭제된 댓글입니다.' : row.content,
-      createdAt: row.created_at,
-      replyCount: Number(row.reply_count),
-      isDeleted,
-    };
-  }
-
-  private mapReplyRowToDto(row: ReplyWithAuthorRow): ReplyResponseDto {
-    const isDeleted = row.deleted_at !== null;
-    return {
-      id: row.id,
-      commentId: row.comment_id,
-      userId: row.user_id,
-      nickname: row.nickname,
-      profileUrl: row.profile_url || undefined,
-      content: isDeleted ? '삭제된 답글입니다.' : row.content,
-      createdAt: row.created_at,
-      isDeleted,
-    };
   }
 }

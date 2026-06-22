@@ -69,4 +69,17 @@ export class FavoriteResponseDto {
 
   @ApiProperty({ required: false })
   intensity?: string;
+
+  static fromRow(row: any, brandName?: string): FavoriteResponseDto {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      brand: brandName || 'Unknown',
+      productName: row.product_name,
+      caffeine: row.caffeine,
+      size: row.size,
+      shot: row.shot,
+      intensity: row.intensity,
+    };
+  }
 }

@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   ConflictException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { LikeRepository } from './like.repository';
 import { RedisService } from '../../providers/redis/redis.service';
@@ -13,14 +14,18 @@ import {
   PostLikedEvent,
   PostUnlikedEvent,
 } from '../../common/events/interaction.events';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
 @Injectable()
 export class LikeService {
+  private readonly logger = new Logger(LikeService.name);
+
   constructor(
     private readonly likeRepository: LikeRepository,
     private readonly redisService: RedisService,
     private readonly postRepository: PostRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly txManager: TransactionManager,
   ) {}
 
   async likePost(
@@ -38,29 +43,24 @@ export class LikeService {
       throw new NotFoundException('Post not found');
     }
 
-    const queryRunner = await this.likeRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.likeRepository.insertLike(userId, postId, queryRunner);
+        await this.likeRepository.updateLikeCount(postId, 1, queryRunner);
+      },
+      {
+        logger: this.logger,
+        context: 'likePost',
+        message: 'Failed to like post',
+      },
+    );
 
-    try {
-      await this.likeRepository.insertLike(userId, postId, queryRunner);
-      await this.likeRepository.updateLikeCount(postId, 1, queryRunner);
+    await this.redisService.sadd(REDIS_KEYS.POST.LIKES(postId), userId);
 
-      await queryRunner.commitTransaction();
-
-      await this.redisService.sadd(REDIS_KEYS.POST.LIKES(postId), userId);
-
-      this.eventEmitter.emit(
-        'post.liked',
-        new PostLikedEvent(userId, likerNickname, postId, post.user_id),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      if (error instanceof NotFoundException) throw error;
-      throw new InternalServerErrorException('Failed to like post');
-    } finally {
-      await queryRunner.release();
-    }
+    this.eventEmitter.emit(
+      'post.liked',
+      new PostLikedEvent(userId, likerNickname, postId, post.user_id),
+    );
   }
 
   async unlikePost(userId: string, postId: string): Promise<void> {
@@ -69,28 +69,24 @@ export class LikeService {
       throw new NotFoundException('Like not found');
     }
 
-    const queryRunner = await this.likeRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.likeRepository.deleteLike(userId, postId, queryRunner);
+        await this.likeRepository.updateLikeCount(postId, -1, queryRunner);
+      },
+      {
+        logger: this.logger,
+        context: 'unlikePost',
+        message: 'Failed to unlike post',
+      },
+    );
 
-    try {
-      await this.likeRepository.deleteLike(userId, postId, queryRunner);
-      await this.likeRepository.updateLikeCount(postId, -1, queryRunner);
+    await this.redisService.srem(REDIS_KEYS.POST.LIKES(postId), userId);
 
-      await queryRunner.commitTransaction();
-
-      await this.redisService.srem(REDIS_KEYS.POST.LIKES(postId), userId);
-
-      this.eventEmitter.emit(
-        'post.unliked',
-        new PostUnlikedEvent(userId, postId),
-      );
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw new InternalServerErrorException('Failed to unlike post');
-    } finally {
-      await queryRunner.release();
-    }
+    this.eventEmitter.emit(
+      'post.unliked',
+      new PostUnlikedEvent(userId, postId),
+    );
   }
 
   async isLiked(userId: string, postId: string): Promise<boolean> {

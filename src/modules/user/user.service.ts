@@ -2,11 +2,11 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  ConflictException,
   UnauthorizedException,
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -14,21 +14,30 @@ import { UserRow } from './entities/user.entity';
 import { UserResponseDto } from './dto/user-response.dto';
 import { RedisService } from '../../providers/redis/redis.service';
 import { OAuthUser } from '../../auth/interfaces/oauth-user.interface';
-import { UserRepository, UserWithStatsRow } from './user.repository';
+import { UserRepository } from './user.repository';
 import { BrandService } from '../brand/brand.service';
 import { AuthService } from '../../auth/auth.service';
 import { REDIS_KEYS } from '../../common/constants/redis-keys';
+import { TransactionManager } from '../../common/database/transaction.manager';
 
 type PatchUser = Omit<UpdateUserDto, 'brand'> & { fav_brand_id: number };
+/**
+ * Wrapper type used to circumvent ESM modules circular dependency issue
+ * caused by reflection metadata saving the type of the property.
+ */
+export type WrapperType<T> = T; // WrapperType === Relation
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly redisService: RedisService,
     private readonly brandService: BrandService,
     @Inject(forwardRef(() => AuthService))
-    private readonly authService: AuthService,
+    private readonly authService: WrapperType<AuthService>,
+    private readonly txManager: TransactionManager,
   ) {}
 
   async setUserInit(
@@ -47,53 +56,43 @@ export class UserService {
       throw new BadRequestException(`Invalid brand name: ${dto.brand}`);
     }
 
-    const queryRunner = await this.userRepository.getQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    await this.txManager.run(
+      async (queryRunner) => {
+        await this.userRepository.insertUser(
+          {
+            public_id: dto.userId,
+            useremail: oauthUser.email,
+            nickname: dto.nickname,
+            fav_brand_id: favBrandId,
+            profile_url: dto.profileUrl,
+            bio: dto.aboutMe,
+            social: oauthUser.provider,
+            visibility: dto.visibility ?? 1,
+          },
+          queryRunner,
+        );
 
-    try {
-      await this.userRepository.insertUser(
-        {
-          public_id: dto.userId,
-          useremail: oauthUser.email,
-          nickname: dto.nickname,
-          fav_brand_id: favBrandId,
-          profile_url: dto.profileUrl,
-          bio: dto.aboutMe,
-          social: oauthUser.provider,
-          visibility: dto.visibility ?? 1,
-        },
-        queryRunner,
-      );
+        await this.userRepository.insertInitStats(dto.userId, queryRunner);
+      },
+      {
+        logger: this.logger,
+        context: 'setUserInit',
+        message: 'Failed to initialize user profile',
+      },
+    );
 
-      await this.userRepository.insertInitStats(dto.userId, queryRunner);
+    await this.redisService.del(`auth_handover:${dto.socialToken}`);
 
-      await queryRunner.commitTransaction();
-      await this.redisService.del(`auth_handover:${dto.socialToken}`);
-
-      const user = await this.userRepository.findByPublicId(dto.userId);
-      if (!user) {
-        throw new InternalServerErrorException('Failed to retrieve new user');
-      }
-
-      const { accessToken, refreshToken } = await this.authService.login(user);
-      return {
-        accessToken: `Bearer ${accessToken}`,
-        refreshToken,
-      };
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-
-      if (error instanceof Error && (error as any).errno === 1062) {
-        throw new ConflictException('Nickname or User already exists');
-      }
-
-      throw error instanceof InternalServerErrorException
-        ? error
-        : new InternalServerErrorException('Failed to initialize user profile');
-    } finally {
-      await queryRunner.release();
+    const user = await this.userRepository.findByPublicId(dto.userId);
+    if (!user) {
+      throw new InternalServerErrorException('Failed to retrieve new user');
     }
+
+    const { accessToken, refreshToken } = await this.authService.login(user);
+    return {
+      accessToken: `Bearer ${accessToken}`,
+      refreshToken,
+    };
   }
 
   async getUserInfo(userId: string): Promise<UserResponseDto> {
@@ -105,7 +104,11 @@ export class UserService {
         throw new NotFoundException('User not found');
       }
 
-      return await this.mapToResponseDto(userWithStats);
+      const brandName = userWithStats.fav_brand_id
+        ? await this.brandService.resolveBrandName(userWithStats.fav_brand_id)
+        : undefined;
+
+      return UserResponseDto.fromRow(userWithStats, brandName || undefined);
     });
   }
 
@@ -178,23 +181,5 @@ export class UserService {
 
   async getLastNotiRead(userId: string): Promise<Date | null> {
     return await this.userRepository.findLastNotiRead(userId);
-  }
-
-  private async mapToResponseDto(
-    row: UserWithStatsRow,
-  ): Promise<UserResponseDto> {
-    const brandName = row.fav_brand_id
-      ? await this.brandService.resolveBrandName(row.fav_brand_id)
-      : '';
-
-    return {
-      userId: row.public_id,
-      nickname: row.nickname || '',
-      profileUrl: row.profile_url || '',
-      aboutMe: row.bio || '',
-      brand: brandName || '',
-      sum: row.sum || 0,
-      visibility: row.visibility,
-    };
   }
 }

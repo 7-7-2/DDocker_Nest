@@ -1,6 +1,7 @@
-import * as dayjs from 'dayjs';
-import * as utc from 'dayjs/plugin/utc';
-import * as isoWeek from 'dayjs/plugin/isoWeek';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import isoWeek from 'dayjs/plugin/isoWeek';
+import { DateUtil } from '../../common/utils/date.util';
 import {
   IntakeTrendBuilder,
   createIntakeTrendContext,
@@ -11,7 +12,8 @@ dayjs.extend(utc);
 dayjs.extend(isoWeek);
 
 describe('IntakeTrendBuilder', () => {
-  const anchor = dayjs.utc('2024-06-16').add(9, 'hour'); // Sunday
+  // Use a fixed UTC string and then toKst to avoid any local machine timezone interference
+  const anchor = DateUtil.toKst('2024-06-16'); // Sunday
 
   const mockIntakes: DetailedIntake[] = [
     {
@@ -63,7 +65,22 @@ describe('IntakeTrendBuilder', () => {
   describe('Aggregation Logic', () => {
     it('should correctly aggregate metrics, thresholds, and rankings', () => {
       const context = createIntakeTrendContext(anchor, 'weekly');
-      const builder = new IntakeTrendBuilder(context, mockIntakes);
+
+      const currentIntakes = mockIntakes.filter((i) => {
+        const d = DateUtil.toKst(i.created_at);
+        return (
+          (d.isAfter(context.currentRange.start) ||
+            d.isSame(context.currentRange.start)) &&
+          (d.isBefore(context.currentRange.end) ||
+            d.isSame(context.currentRange.end))
+        );
+      });
+
+      const builder = new IntakeTrendBuilder(
+        context,
+        currentIntakes,
+        mockIntakes,
+      );
 
       const result = builder
         .buildChart()
@@ -91,7 +108,7 @@ describe('IntakeTrendBuilder', () => {
 
     it('should respect the moderate condition (<= 400)', () => {
       const context = createIntakeTrendContext(anchor, 'weekly');
-      const builder = new IntakeTrendBuilder(context, [
+      const singleIntake = [
         {
           id: 1,
           caffeine: 400,
@@ -99,7 +116,12 @@ describe('IntakeTrendBuilder', () => {
           brand_id: 1,
           brand_name: 'Starbucks',
         },
-      ]);
+      ];
+      const builder = new IntakeTrendBuilder(
+        context,
+        singleIntake,
+        singleIntake,
+      );
 
       const result = builder.buildThresholds().getResult();
       expect(result.threshold.excessiveCount).toBe(0);

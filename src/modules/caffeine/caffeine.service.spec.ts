@@ -6,15 +6,25 @@ import { RedisService } from '../../providers/redis/redis.service';
 import { PostService } from '../post/post.service';
 import { createRedisServiceMock } from '../../test-utils/mocks/redis.service.mock';
 import { createCaffeineRepositoryMock } from '../../test-utils/mocks/caffeine.repository.mock';
+import { TransactionManager } from '../../common/database/transaction.manager';
+import { createTransactionManagerMock } from '../../test-utils/mocks/transaction.manager.mock';
 import { createCaffeineIntakeFixture } from '../../test-utils/fixtures/caffeine.fixture';
 import {
   BadRequestException,
+  HttpException,
+  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { QueryRunner } from 'typeorm';
 import { CreateCaffeineDto } from './dto/create-caffeine.dto';
 import { Mock } from '../../test-utils/types';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import isoWeek from 'dayjs/plugin/isoWeek';
+
+dayjs.extend(utc);
+dayjs.extend(isoWeek);
 
 describe('CaffeineService', () => {
   let service: CaffeineService;
@@ -22,10 +32,29 @@ describe('CaffeineService', () => {
   let brandService: Mock<BrandService>;
   let postService: Mock<PostService>;
   let queryRunner: jest.Mocked<QueryRunner>;
+  let txManager: Mock<TransactionManager>;
 
   beforeEach(async () => {
     const repoMock = createCaffeineRepositoryMock();
     queryRunner = repoMock.getQueryRunner!() as jest.Mocked<QueryRunner>;
+    txManager = createTransactionManagerMock();
+
+    txManager.run!.mockImplementation(async (work, options) => {
+      await queryRunner.startTransaction();
+      try {
+        const result = await work(queryRunner);
+        await queryRunner.commitTransaction();
+        return result;
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException(options?.message);
+      } finally {
+        await queryRunner.release();
+      }
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -33,6 +62,10 @@ describe('CaffeineService', () => {
         {
           provide: CaffeineRepository,
           useValue: repoMock,
+        },
+        {
+          provide: TransactionManager,
+          useValue: txManager,
         },
         {
           provide: BrandService,
@@ -213,7 +246,7 @@ describe('CaffeineService', () => {
       expect(result.ranking[0].cups).toBe(2);
       expect(result.ranking[1].brand).toBe('Mega');
       expect(result.ranking[1].cups).toBe(1);
-      expect(result.chart).toHaveLength(6); // current + 5 prev
+      expect(result.chart).toHaveLength(7); // 6 previous + 1 current
     });
   });
 });

@@ -17,6 +17,17 @@ export class FollowUserItemDto {
   visibility: number;
 
   cursorId: number;
+
+  static fromRow(row: any): FollowUserItemDto {
+    return {
+      userId: row.public_id,
+      nickname: row.nickname,
+      profileUrl: row.profile_url || undefined,
+      caffeineSum: row.caffeine_sum,
+      visibility: row.visibility,
+      cursorId: row.cursor_id,
+    };
+  }
 }
 
 export class PaginatedFollowResponseDto {

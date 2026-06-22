@@ -8,13 +8,7 @@ import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { NotificationRow } from './entities/notification.entity';
 import { NotificationResponseDto } from './dto/notification-payload.dto';
-
-import * as dayjs from 'dayjs';
-import * as utc from 'dayjs/plugin/utc';
-import * as timezone from 'dayjs/plugin/timezone';
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
+import { DateUtil } from '../../common/utils/date.util';
 
 @Injectable()
 export class NotificationConsumer implements OnApplicationBootstrap {
@@ -222,8 +216,8 @@ export class NotificationConsumer implements OnApplicationBootstrap {
 
       const lastRead = await this.userService.getLastNotiRead(receiverId);
       const lastReadAt = lastRead
-        ? dayjs(lastRead).subtract(9, 'hour').toISOString()
-        : dayjs(new Date()).subtract(9, 'hour').toISOString();
+        ? DateUtil.toUtc(lastRead).toISOString()
+        : DateUtil.toUtc(new Date()).toISOString();
 
       const signalPayload: NotificationResponseDto = {
         notificationId: notification.notificationId,
