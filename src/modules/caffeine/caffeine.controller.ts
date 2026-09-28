@@ -9,6 +9,7 @@ import {
   Query,
   Delete,
   Param,
+  UseInterceptors,
 } from '@nestjs/common';
 import { CaffeineService } from './caffeine.service';
 import { CreateCaffeineDto } from './dto/create-caffeine.dto';
@@ -23,6 +24,7 @@ import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { CaffeineMonthlyViewDto } from './dto/caffeine-calendar.dto';
 import { TodayCaffeineResponseDto } from './dto/caffeine-stats.dto';
 import { IntakeTrendResponseDto } from './dto/intake-trend.dto';
+import { IdempotencyInterceptor } from '../../common/interceptors/idempotency.interceptor';
 
 @ApiTags('Caffeine')
 @Controller('caffeine')
@@ -30,6 +32,7 @@ export class CaffeineController {
   constructor(private readonly caffeineService: CaffeineService) {}
 
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @ApiBearerAuth()
   @Post('intake')
   @HttpCode(HttpStatus.CREATED)
