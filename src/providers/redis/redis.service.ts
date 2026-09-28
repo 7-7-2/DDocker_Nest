@@ -50,6 +50,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.redisClient.set(key, val);
   }
 
+  async setNx(key: string, value: any, ttlSeconds: number): Promise<boolean> {
+    const val = typeof value === 'string' ? value : JSON.stringify(value);
+    const result = await this.redisClient.set(key, val, 'EX', ttlSeconds, 'NX');
+    return result === 'OK';
+  }
+
   async del(key: string | string[]): Promise<number> {
     if (Array.isArray(key)) {
       return this.redisClient.del(...key);

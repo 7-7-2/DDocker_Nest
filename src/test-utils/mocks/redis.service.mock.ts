@@ -4,6 +4,7 @@ import { Mock } from '../types';
 export const createRedisServiceMock = (): Mock<RedisService> => ({
   get: jest.fn(),
   set: jest.fn(),
+  setNx: jest.fn(),
   del: jest.fn(),
   delByPattern: jest.fn(),
   getOrSet: jest.fn(
