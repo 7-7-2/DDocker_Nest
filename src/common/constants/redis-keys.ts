@@ -44,4 +44,5 @@ export const REDIS_KEYS = {
     POPULAR_MENU: (brandId: number) =>
       `discovery:brand:popular-menu:${brandId}`,
   },
+  IDEMPOTENCY: (userId: string, key: string) => `idempotency:${userId}:${key}`,
 };
