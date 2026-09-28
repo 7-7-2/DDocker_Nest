@@ -8,6 +8,7 @@ import {
   UseGuards,
   Query,
   Patch,
+  UseInterceptors,
 } from '@nestjs/common';
 import { PostService } from './post.service';
 import {
@@ -25,6 +26,7 @@ import {
 } from './dto/post-response.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { IdempotencyInterceptor } from '../../common/interceptors/idempotency.interceptor';
 
 @ApiTags('Posts')
 @Controller('posts')
@@ -32,6 +34,7 @@ export class PostController {
   constructor(private readonly postService: PostService) {}
 
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @ApiBearerAuth()
   @Post('register')
   @ApiOperation({ summary: 'caffeine_intake 포함 포스트 동록' })
